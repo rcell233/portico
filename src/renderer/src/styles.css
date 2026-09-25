@@ -1165,14 +1165,14 @@ details[open] {
   color: #83907a;
   font-size: 11px;
 }
-.workspace-return,
-.workspace-tab-label {
+.workspace-return {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 18px;
-  font-size: 12px;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
   color: #486444;
   background: #eef0e8;
   border: 0;
@@ -1183,7 +1183,7 @@ details[open] {
   left: 0;
   z-index: 1;
 }
-.workspace-tab-label {
+.workspace-return.active {
   background: #f7f7f2;
 }
 .picker-section-label {
