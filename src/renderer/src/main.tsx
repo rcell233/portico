@@ -13,6 +13,8 @@ import {
   LayoutGrid,
   LoaderCircle,
   Pencil,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Power,
   RefreshCw,
@@ -67,6 +69,7 @@ function App(): React.JSX.Element {
   const [workspace, setWorkspace] = useState<Workspace>(empty),
     [selectedHost, setSelectedHost] = useState(''),
     [query, setQuery] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [modal, setModal] = useState<Modal | null>(null),
     [error, setError] = useState(''),
     [pending, setPending] = useState<string[]>([])
@@ -100,6 +103,9 @@ function App(): React.JSX.Element {
     return cleanup
   }, [])
   useEffect(() => {
+    setSidebarCollapsed(workspace.activeTab !== null)
+  }, [workspace.activeTab])
+  useEffect(() => {
     const element = viewport.current
     if (!element) return
     const measure = (): void => {
@@ -110,7 +116,7 @@ function App(): React.JSX.Element {
     observer.observe(element)
     measure()
     return () => observer.disconnect()
-  }, [workspace.activeTab])
+  }, [workspace.activeTab, sidebarCollapsed])
   useEffect(() => {
     if (modal && !dialog.current?.open) dialog.current?.showModal()
   }, [modal])
@@ -209,8 +215,12 @@ function App(): React.JSX.Element {
     await close()
   }
   return (
-    <div className="workspace">
-      <aside className="sidebar">
+    <div className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <aside
+        id="workspace-sidebar"
+        className="sidebar"
+        hidden={sidebarCollapsed}
+      >
         <button
           className="brand"
           onClick={() => {
@@ -302,6 +312,20 @@ function App(): React.JSX.Element {
       </aside>
       <main>
         <div className="tabbar">
+          <button
+            className="sidebar-toggle"
+            title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+            aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="workspace-sidebar"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={17} />
+            ) : (
+              <PanelLeftClose size={17} />
+            )}
+          </button>
           <button
             className={`home-tab ${!current ? 'active' : ''}`}
             title="应用库"

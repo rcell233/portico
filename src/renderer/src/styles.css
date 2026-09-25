@@ -52,6 +52,28 @@ button:hover:not(:disabled) {
   grid-template-columns: 232px minmax(0, 1fr);
   overflow: hidden;
 }
+.workspace.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sidebar[hidden] {
+  display: none;
+}
+.sidebar-toggle {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-right: 1px solid #e0e4d9;
+  background: #eef0e8;
+  color: #52705b;
+}
+.sidebar-toggle:focus-visible {
+  outline: 2px solid #52705b;
+  outline-offset: -4px;
+}
 .sidebar {
   background: #e9ece4;
   border-right: 1px solid #dce1d5;
