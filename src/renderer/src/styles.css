@@ -1025,3 +1025,93 @@ details[open] {
     animation: none;
   }
 }
+
+.config-source {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  color: #6f8862;
+  padding: 16px;
+  border: 1px solid #dfe6d5;
+  background: #f0f4e9;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.config-source > div {
+  flex: 1;
+}
+.config-source strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+}
+.config-source code {
+  display: block;
+  font-size: 11px;
+  color: #91a082;
+  margin-top: 6px;
+}
+.config-search {
+  width: 100%;
+  margin-top: 18px;
+}
+.config-list {
+  max-height: 340px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.config-list > button > span {
+  min-width: 0;
+}
+.config-list small {
+  overflow-wrap: anywhere;
+}
+.config-list .already-added {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.config-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 32px 14px;
+  gap: 12px;
+  color: #8b9c7b;
+}
+.config-empty strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.config-empty p {
+  font-size: 11px;
+  line-height: 1.8;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.config-manual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #e2e7d8;
+  margin-top: 24px;
+  padding-top: 18px;
+}
+.config-manual > span {
+  color: #99a78a;
+  font-size: 11px;
+}
+.back-to-config {
+  margin-bottom: 22px;
+}
+.config-review {
+  margin-bottom: 20px;
+  line-height: 1.7;
+}
+.service-list .config-warning {
+  color: #a18257;
+}

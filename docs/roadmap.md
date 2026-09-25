@@ -20,7 +20,8 @@
 ## 下一阶段
 
 - [ ] 使用用户实际服务器验证 TensorBoard / JupyterLab 环境
-- [ ] SSH MFA、Include / ProxyCommand 等高级配置兼容
+- [x] SSH Config 优先添加、Include 枚举、搜索与重复主机提示
+- [ ] SSH MFA、ProxyCommand 等高级配置兼容
 - [ ] 可配置的跨域资源、SSO 与 HTTP Basic 网页认证
 - [ ] 工作区会话恢复、批量导入导出与服务日志轮转
 - [ ] macOS 签名、公证与自动更新

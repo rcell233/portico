@@ -44,7 +44,7 @@
 
 ## 后续兼容扩展
 
-- MFA / keyboard-interactive 与 SSH config Include / ProxyCommand。
+- MFA / keyboard-interactive 与 SSH config ProxyCommand。
 - 用户可配置的额外资源域名、跨域 SSO 和服务端 HTTP Basic 认证。
 - 非 Linux 的服务发现与后台进程管理适配。
 - 更完整的工作区恢复、导出导入、托管日志轮转。

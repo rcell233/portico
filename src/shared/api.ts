@@ -62,6 +62,9 @@ export interface Discovery {
   note: string
 }
 export interface ImportedHost {
+  auth: Host['auth']
+  proxyJump: string
+  error?: string
   name: string
   hostname: string
   port: number

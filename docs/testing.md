@@ -5,6 +5,7 @@
 `npm test` 使用临时目录和仅监听 loopback 的 ssh2 测试服务器，不连接用户服务器。覆盖：
 
 - 配置加密、并发写入、认证切换和循环跳板检测。
+- SSH Config Include、循环引用、IdentityFile 选择、单主机解析失败隔离及真实 `ssh -G` 解析。
 - ss / netstat / IPv6 端口解析。
 - SSH 连接复用、跳板、主机密钥变化拒绝与主动断开。
 - SSH 隧道中的 HTTP、WebSocket Upgrade 和 Chromium CONNECT 通道。
@@ -14,7 +15,7 @@
 
 ## 桌面手动验证
 
-运行 `npx tsxtests/manual-fixture.ts`，终端打印临时 SSH 和 HTTP 端口。测试用户为 fixture，密码仅用于此临时 loopback 服务。按 Ctrl+C 结束服务器。
+运行 `npx tsx tests/manual-fixture.ts`，终端打印临时 SSH 和 HTTP 端口。测试用户为 fixture，密码仅用于此临时 loopback 服务。按 Ctrl+C 结束服务器。
 
 1. 添加本机验证主机与应用，核对临时主机指纹。
 2. 打开网页，页面应显示 SSH 加载成功、Cookie 可用、桌面 API 隔离以及 WebSocket 通信成功。

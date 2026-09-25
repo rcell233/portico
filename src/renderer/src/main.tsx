@@ -32,6 +32,7 @@ import type {
   Workspace
 } from '../../shared/api'
 import { AppForm, HostForm, newApp } from './components/Forms'
+import { HostPicker, BackToConfig } from './components/HostPicker'
 import logo from '../../../resources/icon.svg'
 import './styles.css'
 const api = window.portico
@@ -43,11 +44,11 @@ const empty: Workspace = {
   activeTab: null
 }
 type Modal =
-  | { kind: 'host'; host?: Host }
+  | { kind: 'host'; host?: Host; adding?: boolean; warning?: string }
   | { kind: 'app'; app: RemoteApp }
   | { kind: 'discover'; host: Host; data?: Discovery }
   | { kind: 'logs'; app: RemoteApp; text?: string }
-  | { kind: 'import'; hosts?: ImportedHost[] }
+  | { kind: 'import' }
   | {
       kind: 'confirm'
       title: string
@@ -139,7 +140,7 @@ function App(): React.JSX.Element {
   ).length
   const addApp = (initial?: RemoteApp): void => {
     if (!workspace.hosts.length) {
-      void show({ kind: 'host' })
+      importHosts()
       return
     }
     void show({
@@ -185,10 +186,29 @@ function App(): React.JSX.Element {
     })
   }
   const importHosts = (): void => {
-    void run('import', async () => {
-      await show({ kind: 'import' })
-      const hosts = await api.importHosts()
-      setModal((m) => (m?.kind === 'import' ? { ...m, hosts } : m))
+    setError('')
+    void show({ kind: 'import' })
+  }
+  const selectConfigHost = (h: ImportedHost): void => {
+    const jump =
+      h.proxyJump && !h.proxyJump.includes(',')
+        ? workspace.hosts.find((saved) => saved.name === h.proxyJump)
+        : undefined
+    setModal({
+      kind: 'host',
+      adding: true,
+      warning: h.warning,
+      host: {
+        id: crypto.randomUUID(),
+        name: h.name,
+        hostname: h.hostname,
+        port: h.port,
+        username: h.username,
+        privateKeyPath: h.privateKeyPath,
+        auth: h.auth,
+        jumpHostId: jump?.id || '',
+        hasSecret: false
+      }
     })
   }
   return (
@@ -229,7 +249,7 @@ function App(): React.JSX.Element {
             <button
               title="添加主机"
               className="icon-button"
-              onClick={() => void show({ kind: 'host' })}
+              onClick={() => importHosts()}
             >
               <Plus size={17} />
             </button>
@@ -268,10 +288,7 @@ function App(): React.JSX.Element {
             </p>
           )}
         </div>
-        <button
-          className="add-host"
-          onClick={() => void show({ kind: 'host' })}
-        >
+        <button className="add-host" onClick={() => importHosts()}>
           <Plus size={16} />
           添加主机
         </button>
@@ -340,7 +357,7 @@ function App(): React.JSX.Element {
                   onClick={() => (host ? discover(host) : importHosts())}
                 >
                   {host ? <Activity size={15} /> : <FolderInput size={15} />}
-                  {host ? '发现服务' : '导入主机'}
+                  {host ? '发现服务' : '添加主机'}
                 </button>
                 <button className="primary" onClick={() => addApp()}>
                   <Plus size={16} />
@@ -554,9 +571,7 @@ function App(): React.JSX.Element {
                     <button
                       className="primary"
                       onClick={() =>
-                        workspace.hosts.length
-                          ? addApp()
-                          : void show({ kind: 'host' })
+                        workspace.hosts.length ? addApp() : importHosts()
                       }
                     >
                       <Plus size={16} />
@@ -727,9 +742,11 @@ function App(): React.JSX.Element {
               <p className="eyebrow">PORTICO WORKSPACE</p>
               <h2>
                 {modal.kind === 'host'
-                  ? modal.host
-                    ? '编辑主机'
-                    : '添加 SSH 主机'
+                  ? modal.adding
+                    ? modal.host
+                      ? '确认 SSH 主机'
+                      : '手动配置主机'
+                    : '编辑主机'
                   : modal.kind === 'app'
                     ? workspace.apps.some((a) => a.id === modal.app.id)
                       ? '编辑应用'
@@ -739,7 +756,7 @@ function App(): React.JSX.Element {
                       : modal.kind === 'logs'
                         ? `运行日志 · ${modal.app.name}`
                         : modal.kind === 'import'
-                          ? '从 SSH config 导入'
+                          ? '添加 SSH 主机'
                           : modal.kind === 'confirm'
                             ? modal.title
                             : '关于你的远程工作空间'}
@@ -760,15 +777,22 @@ function App(): React.JSX.Element {
               </div>
             )}
             {modal.kind === 'host' && (
-              <HostForm
-                host={modal.host}
-                hosts={workspace.hosts}
-                save={async (value) => {
-                  await api.saveHost(value)
-                  await close()
-                }}
-                cancel={() => void close()}
-              />
+              <>
+                {modal.adding && <BackToConfig onClick={importHosts} />}
+                {modal.warning && (
+                  <div className="note config-review">{modal.warning}</div>
+                )}
+                <HostForm
+                  key={modal.host?.id || 'manual'}
+                  host={modal.host}
+                  hosts={workspace.hosts}
+                  save={async (value) => {
+                    await api.saveHost(value)
+                    await close()
+                  }}
+                  cancel={() => void close()}
+                />
+              </>
             )}
             {modal.kind === 'app' && (
               <AppForm
@@ -861,52 +885,13 @@ function App(): React.JSX.Element {
                 </div>
               </>
             )}
-            {modal.kind === 'import' &&
-              (modal.hosts ? (
-                <>
-                  <p className="intro">
-                    读取 ~/.ssh/config 中明确命名的
-                    Host。点击导入后可继续调整认证和跳板机。
-                  </p>
-                  <div className="service-list">
-                    {modal.hosts.map((h) => (
-                      <button
-                        key={h.name}
-                        onClick={() =>
-                          setModal({
-                            kind: 'host',
-                            host: {
-                              ...h,
-                              id: crypto.randomUUID(),
-                              auth: 'agent',
-                              jumpHostId: '',
-                              hasSecret: false
-                            }
-                          })
-                        }
-                      >
-                        <Server size={19} />
-                        <span>
-                          <strong>{h.name}</strong>
-                          <small>
-                            {h.username}@{h.hostname}:{h.port}
-                          </small>
-                          {h.warning && <small>{h.warning}</small>}
-                        </span>
-                        <Plus size={17} />
-                      </button>
-                    ))}
-                    {!modal.hosts.length && (
-                      <p>
-                        未找到明确命名的 Host；通配符和 Include
-                        文件不在当前导入列表中。
-                      </p>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <Loading text="正在读取本机 SSH 配置…" />
-              ))}
+            {modal.kind === 'import' && (
+              <HostPicker
+                saved={workspace.hosts}
+                select={selectConfigHost}
+                manual={() => setModal({ kind: 'host', adding: true })}
+              />
+            )}
             {modal.kind === 'confirm' && (
               <>
                 <p className="intro">{modal.detail}</p>
@@ -934,7 +919,9 @@ function App(): React.JSX.Element {
                 <img src={logo} alt="Portico 图标" />
                 <p>Portico 将 SSH 主机上的 Web 服务放进独立的应用标签页。</p>
                 <ol>
-                  <li>添加主机，选择 SSH agent、私钥或密码认证。</li>
+                  <li>
+                    添加主机，优先从本机 SSH 配置选择；没有配置时再手动添加。
+                  </li>
                   <li>添加应用的远端地址和端口，或使用“发现服务”。</li>
                   <li>打开应用；需要时启用按需启动，并填写命令与工作目录。</li>
                 </ol>
