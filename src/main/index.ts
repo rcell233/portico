@@ -16,6 +16,8 @@ import { discoveryCommand, parseListeners } from './core/discovery'
 import { importSshConfig } from './core/import'
 import { appSchema, boundsSchema, hostSchema, idSchema } from './core/schema'
 import { Views } from './views'
+import { promptSsh } from './ssh-prompt'
+import { sshEnvironment } from './core/ssh-environment'
 import type { Workspace } from '../shared/api'
 
 if (process.env.PORTICO_USER_DATA)
@@ -25,6 +27,7 @@ let window: BrowserWindow | null = null
 let store: Store
 let ssh: SshManager
 let services: ServiceManager
+let sshEnv: NodeJS.ProcessEnv = process.env
 let views: Views | undefined
 const resource = (name: string): string =>
   join(
@@ -144,7 +147,7 @@ function register(): void {
       note: '显示当前 SSH 用户可见的 TCP 监听端口。进程信息可能受权限限制，非 Web 服务不能直接在应用中浏览。'
     }
   })
-  handle('importHosts', () => importSshConfig())
+  handle('importHosts', () => importSshConfig({ env: sshEnv }))
   handle('pickKey', async () => {
     const selected = await dialog.showOpenDialog(window!, {
       title: '选择 SSH 私钥',
@@ -200,22 +203,42 @@ app.whenReady().then(async () => {
       }
     })
     await store.load()
-    ssh = new SshManager(store, changed, async (host, fingerprint) => {
-      if (!window) return false
-      return (
-        (
-          await dialog.showMessageBox(window, {
-            type: 'question',
-            title: '首次连接主机',
-            message: `信任 ${host.name} 的 SSH 主机密钥？`,
-            detail: `${host.hostname}:${host.port}\n${fingerprint}\n\n请核对服务器指纹。确认后将加密保存，密钥变化时拒绝连接。`,
-            buttons: ['取消', '信任并连接'],
-            defaultId: 0,
-            cancelId: 0
-          })
-        ).response === 1
-      )
-    })
+    sshEnv = await sshEnvironment()
+    ssh = new SshManager(
+      store,
+      changed,
+      async (host, fingerprint) => {
+        if (!window) return false
+        return (
+          (
+            await dialog.showMessageBox(window, {
+              type: 'question',
+              title: '首次连接主机',
+              message: `信任 ${host.name} 的 SSH 主机密钥？`,
+              detail: `${host.hostname}:${host.port}\n${fingerprint}\n\n请核对服务器指纹。确认后将加密保存，密钥变化时拒绝连接。`,
+              buttons: ['取消', '信任并连接'],
+              defaultId: 0,
+              cancelId: 0
+            })
+          ).response === 1
+        )
+      },
+      (host) => ({
+        env: sshEnv,
+        askpass: {
+          nodePath: process.execPath,
+          scriptPath: resource('ssh-askpass.cjs'),
+          prompt: (request, signal) =>
+            promptSsh(
+              window,
+              resource('ssh-prompt.html'),
+              host.name,
+              request,
+              signal
+            )
+        }
+      })
+    )
     services = new ServiceManager(ssh)
     session.defaultSession.setPermissionRequestHandler(
       (_contents, _permission, callback) => callback(false)

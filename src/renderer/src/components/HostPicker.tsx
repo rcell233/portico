@@ -17,9 +17,11 @@ export function HostPicker({
   manual
 }: {
   saved: Host[]
-  select: (host: ImportedHost) => void
+  select: (host: ImportedHost) => Promise<void>
   manual: () => void
 }): React.JSX.Element {
+  const [saving, setSaving] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [hosts, setHosts] = useState<ImportedHost[]>([])
   const [query, setQuery] = useState(''),
     [loading, setLoading] = useState(true),
@@ -73,7 +75,7 @@ export function HostPicker({
         </button>
       </div>
       <p className="intro">
-        选择已有主机，自动填入连接信息。确认后保存到 Portico。
+        选择即添加。连接时直接使用本机 SSH 配置，包括代理、跳板和认证方式。
       </p>
       <label className="search config-search">
         <Search size={16} />
@@ -107,17 +109,18 @@ export function HostPicker({
       ) : (
         <div className="service-list config-list">
           {matches.map((h) => {
-            const exists = saved.some(
-              (s) =>
-                s.hostname === h.hostname &&
-                s.port === h.port &&
-                s.username === h.username
-            )
+            const exists = saved.some((s) => s.sshAlias === h.name)
             return (
               <button
                 key={h.name}
-                disabled={exists || Boolean(h.error)}
-                onClick={() => select(h)}
+                disabled={exists || Boolean(saving)}
+                onClick={() => {
+                  setSaving(h.name)
+                  setSaveError('')
+                  void select(h)
+                    .catch((e) => setSaveError(String(e)))
+                    .finally(() => setSaving(''))
+                }}
               >
                 <Server size={19} />
                 <span>
@@ -126,15 +129,15 @@ export function HostPicker({
                     {h.username ? `${h.username}@` : ''}
                     {h.hostname}:{h.port}
                   </small>
-                  {h.warning && (
-                    <small className="config-warning">{h.warning}</small>
-                  )}
+                  {h.note && <small className="config-note">{h.note}</small>}
                 </span>
                 {exists ? (
                   <span className="already-added">
                     <Check size={13} />
                     已添加
                   </span>
+                ) : saving === h.name ? (
+                  <LoaderCircle size={17} className="spin" />
                 ) : (
                   <ChevronRight size={17} />
                 )}
@@ -149,9 +152,18 @@ export function HostPicker({
           )}
         </div>
       )}
+      {saveError && (
+        <p className="form-error" role="alert">
+          {saveError}
+        </p>
+      )}
       <div className="config-manual">
         <span>配置里没有这台主机？</span>
-        <button className="text-button" onClick={manual}>
+        <button
+          className="text-button"
+          disabled={Boolean(saving)}
+          onClick={manual}
+        >
           手动配置
           <ChevronRight size={14} />
         </button>

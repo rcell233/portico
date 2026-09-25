@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'"
+    />
+    <title>SSH 认证</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 30px;
+        color: #222d29;
+        background: #f6f5f1;
+        font:
+          14px -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      .eyebrow {
+        color: #4c7866;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 10px 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 150px;
+        overflow: auto;
+        font:
+          13px/1.6 ui-monospace,
+          monospace;
+      }
+      input {
+        width: 100%;
+        border: 1px solid #cdd5cc;
+        border-radius: 9px;
+        padding: 12px;
+        font: inherit;
+      }
+      input:focus {
+        outline: 2px solid #527e67;
+      }
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+      }
+      button {
+        border: 1px solid #d7ddd4;
+        border-radius: 9px;
+        padding: 10px 18px;
+        background: white;
+        cursor: pointer;
+        font: inherit;
+      }
+      button[type='submit'] {
+        background: #285741;
+        color: white;
+        border-color: #285741;
+      }
+      small {
+        display: block;
+        margin-top: 10px;
+        color: #6c766d;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+    <script src="ssh-prompt.js" defer></script>
+  </head>
+  <body>
+    <p class="eyebrow">PORTICO · SYSTEM SSH</p>
+    <h1 id="title">SSH 认证</h1>
+    <pre id="message"></pre>
+    <form>
+      <input
+        id="answer"
+        type="password"
+        aria-label="SSH 认证响应"
+        autocomplete="off"
+        autofocus
+      />
+      <small id="note">响应仅交给本机 SSH 进程，不会保存。</small>
+      <div class="actions">
+        <button type="button" id="cancel">取消</button
+        ><button type="submit" id="submit">继续连接</button>
+      </div>
+    </form>
+  </body>
+</html>

@@ -23,10 +23,12 @@ export function HostForm({
   host,
   hosts,
   save,
+  useConfig,
   cancel
 }: {
   host?: Host
   hosts: Host[]
+  useConfig: () => void
   save: (value: HostInput) => Promise<void>
   cancel: () => void
 }): React.JSX.Element {
@@ -72,111 +74,136 @@ export function HostForm({
             onChange={(e) => update({ name: e.target.value })}
           />
         </Field>
-        <Field label="SSH 地址">
-          <input
-            required
-            placeholder="192.168.1.100 或 server.example.com"
-            value={value.hostname}
-            onChange={(e) => update({ hostname: e.target.value })}
-          />
-        </Field>
-        <Field label="用户名">
-          <input
-            required
-            placeholder="ubuntu"
-            value={value.username}
-            onChange={(e) => update({ username: e.target.value })}
-          />
-        </Field>
-        <Field label="SSH 端口">
-          <input
-            type="number"
-            required
-            min="1"
-            max="65535"
-            value={value.port}
-            onChange={(e) => update({ port: Number(e.target.value) })}
-          />
-        </Field>
-        <Field label="认证方式">
-          <select
-            value={value.auth}
-            onChange={(e) =>
-              update({
-                auth: e.target.value as HostInput['auth'],
-                secret: undefined
-              })
-            }
-          >
-            <option value="agent">SSH agent</option>
-            <option value="key">私钥文件</option>
-            <option value="password">密码</option>
-          </select>
-        </Field>
-        <Field label="跳板主机">
-          <select
-            value={value.jumpHostId}
-            onChange={(e) => update({ jumpHostId: e.target.value })}
-          >
-            <option value="">直接连接</option>
-            {hosts
-              .filter((h) => h.id !== value.id)
-              .map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                </option>
-              ))}
-          </select>
-        </Field>
+        {value.sshAlias ? (
+          <Field label="本机 SSH Host 别名">
+            <input readOnly value={value.sshAlias} />
+          </Field>
+        ) : (
+          <>
+            <Field label="SSH 地址">
+              <input
+                required
+                placeholder="192.168.1.100 或 server.example.com"
+                value={value.hostname}
+                onChange={(e) => update({ hostname: e.target.value })}
+              />
+            </Field>
+            <Field label="用户名">
+              <input
+                required
+                placeholder="ubuntu"
+                value={value.username}
+                onChange={(e) => update({ username: e.target.value })}
+              />
+            </Field>
+            <Field label="SSH 端口">
+              <input
+                type="number"
+                required
+                min="1"
+                max="65535"
+                value={value.port}
+                onChange={(e) => update({ port: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="认证方式">
+              <select
+                value={value.auth}
+                onChange={(e) =>
+                  update({
+                    auth: e.target.value as HostInput['auth'],
+                    secret: undefined
+                  })
+                }
+              >
+                <option value="agent">SSH agent</option>
+                <option value="key">私钥文件</option>
+                <option value="password">密码</option>
+              </select>
+            </Field>
+            <Field label="跳板主机">
+              <select
+                value={value.jumpHostId}
+                onChange={(e) => update({ jumpHostId: e.target.value })}
+              >
+                <option value="">直接连接</option>
+                {hosts
+                  .filter((h) => h.id !== value.id)
+                  .map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </>
+        )}
       </div>
-      {value.auth === 'key' && (
-        <Field label="私钥文件">
-          <div className="input-action">
-            <input
-              required
-              placeholder="~/.ssh/id_ed25519"
-              value={value.privateKeyPath}
-              onChange={(e) => update({ privateKeyPath: e.target.value })}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              title="选择私钥文件"
-              onClick={() =>
-                void window.portico
-                  .pickKey()
-                  .then((path) => path && update({ privateKeyPath: path }))
-                  .catch((e) => setError(String(e)))
-              }
-            >
-              <FolderKey size={18} />
-            </button>
-          </div>
-        </Field>
-      )}
-      {value.auth !== 'agent' && (
-        <Field
-          label={value.auth === 'password' ? 'SSH 密码' : '私钥口令（可选）'}
-          hint={
-            host?.hasSecret
-              ? '已安全保存。留空保持原值，输入新值即可替换。'
-              : '使用操作系统安全存储加密，不会写入明文配置。'
-          }
-        >
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={value.secret || ''}
-            onChange={(e) => update({ secret: e.target.value || undefined })}
-          />
-        </Field>
-      )}
-      {value.auth === 'agent' && (
+      {value.sshAlias ? (
         <div className="note">
           <Info size={16} />
-          使用当前系统 SSH agent 中已加载的密钥。
+          使用 ~/.ssh/config 中的原始配置连接。代理、跳板和认证由系统 SSH
+          处理；修改配置后重新连接即可生效。
         </div>
+      ) : (
+        <>
+          {value.auth === 'key' && (
+            <Field label="私钥文件">
+              <div className="input-action">
+                <input
+                  required
+                  placeholder="~/.ssh/id_ed25519"
+                  value={value.privateKeyPath}
+                  onChange={(e) => update({ privateKeyPath: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="选择私钥文件"
+                  onClick={() =>
+                    void window.portico
+                      .pickKey()
+                      .then((path) => path && update({ privateKeyPath: path }))
+                      .catch((e) => setError(String(e)))
+                  }
+                >
+                  <FolderKey size={18} />
+                </button>
+              </div>
+            </Field>
+          )}
+          {value.auth !== 'agent' && (
+            <Field
+              label={
+                value.auth === 'password' ? 'SSH 密码' : '私钥口令（可选）'
+              }
+              hint={
+                host?.hasSecret
+                  ? '已安全保存。留空保持原值，输入新值即可替换。'
+                  : '使用操作系统安全存储加密，不会写入明文配置。'
+              }
+            >
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={value.secret || ''}
+                onChange={(e) =>
+                  update({ secret: e.target.value || undefined })
+                }
+              />
+            </Field>
+          )}
+          {value.auth === 'agent' && (
+            <div className="note">
+              <Info size={16} />
+              使用当前系统 SSH agent 中已加载的密钥。
+            </div>
+          )}
+        </>
       )}
+      <button type="button" className="text-button" onClick={useConfig}>
+        {value.sshAlias ? '选择其他 SSH Host' : '改用本机 SSH Config'}
+      </button>
       {error && (
         <p className="form-error" role="alert">
           {error}

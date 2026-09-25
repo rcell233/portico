@@ -12,6 +12,12 @@ const clean = z
   .refine((s) => !s.includes('\0'), '不允许空字符')
 export const hostSchema = z.object({
   id,
+  sshAlias: z
+    .string()
+    .min(1)
+    .max(253)
+    .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/)
+    .optional(),
   name: z.string().trim().min(1).max(100),
   hostname: address,
   port: z.number().int().min(1).max(65535),

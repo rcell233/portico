@@ -9,6 +9,7 @@ export interface Host {
   auth: 'agent' | 'key' | 'password'
   privateKeyPath: string
   jumpHostId: string
+  sshAlias?: string
   hasSecret: boolean
 }
 export interface HostInput extends Omit<Host, 'hasSecret'> {
@@ -62,15 +63,11 @@ export interface Discovery {
   note: string
 }
 export interface ImportedHost {
-  auth: Host['auth']
-  proxyJump: string
-  error?: string
   name: string
   hostname: string
   port: number
   username: string
-  privateKeyPath: string
-  warning: string
+  note: string
 }
 export interface Bounds {
   x: number

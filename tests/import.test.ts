@@ -43,32 +43,16 @@ test('SSH picker discovers Include hosts, quoted aliases and equals syntax witho
     await rm(home, { recursive: true, force: true })
   }
 })
-test('SSH import retains the first usable IdentityFile, expands tokens, and does not treat ProxyJump none as a proxy', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'portico-identity-'))
-  try {
-    await mkdir(join(home, '.ssh'))
-    const key = join(home, '.ssh/alice-work-key')
-    await writeFile(key, 'fixture placeholder, not a private key')
-    const result = await resolveImportedHost(
-      'work',
-      'hostname 192.0.2.1\nuser alice\nport 2222\nidentityfile ~/.ssh/missing\nidentityfile ~/.ssh/%r-%n-key\nidentityfile ~/.ssh/also-missing\nproxyjump none\n',
-      home
-    )
-    assert.equal(result.auth, 'key')
-    assert.equal(result.privateKeyPath, key)
-    assert.equal(result.port, 2222)
-    assert.equal(result.warning, '')
-    const missing = await resolveImportedHost(
-      'work',
-      'user alice\nidentitiesonly yes\nidentityfile ~/.ssh/absent\nproxyjump bastion\n',
-      home
-    )
-    assert.equal(missing.auth, 'key')
-    assert.equal(missing.proxyJump, 'bastion')
-    assert.match(missing.warning, /未找到/)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
+test('config metadata never converts authentication or rejects native connection options', () => {
+  const result = resolveImportedHost(
+    'work',
+    'hostname 192.0.2.1\nuser alice\nport 2222\nidentityfile /missing/key\nidentitiesonly yes\nproxycommand special-login %h %p\n'
+  )
+  assert.equal(result.port, 2222)
+  assert.match(result.note, /ProxyCommand/)
+  assert.doesNotMatch(result.note, /手动|不支持/)
+  assert.equal('auth' in result, false)
+  assert.equal('privateKeyPath' in result, false)
 })
 test('one broken host does not hide the other selectable hosts', async () => {
   const home = await mkdtemp(join(tmpdir(), 'portico-resolve-'))
@@ -84,8 +68,9 @@ test('one broken host does not hide the other selectable hosts', async () => {
       }
     })
     assert.equal(result[0].hostname, '192.0.2.1')
-    assert.equal(result[0].error, undefined)
-    assert.equal(result[1].error, '配置解析失败')
+    assert.equal(result[0].note, '')
+    assert.equal(result[1].name, 'bad')
+    assert.match(result[1].note, /连接时由系统 SSH/)
   } finally {
     await rm(home, { recursive: true, force: true })
   }

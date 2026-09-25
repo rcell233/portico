@@ -4,11 +4,15 @@ import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import type { Connection, Host } from '../../shared/api'
 import { Store } from './store'
+import type { Duplex } from 'node:stream'
+import { OpenSshConnection, type OpenSshOptions } from './openssh'
+
+type Transport = Client | OpenSshConnection
 
 type Entry = {
-  client?: Client
-  dialing?: Client
-  pending?: Promise<Client>
+  client?: Transport
+  dialing?: Transport
+  pending?: Promise<Transport>
   wanted: boolean
   timer?: NodeJS.Timeout
   attempt: number
@@ -19,7 +23,8 @@ export class SshManager {
   constructor(
     private store: Store,
     private changed: () => void,
-    private trust: (host: Host, fingerprint: string) => Promise<boolean>
+    private trust: (host: Host, fingerprint: string) => Promise<boolean>,
+    private nativeOptions: (host: Host) => OpenSshOptions = () => ({})
   ) {}
   states(): Connection[] {
     return this.store.hosts().map(
@@ -43,7 +48,7 @@ export class SshManager {
     }
     return entry
   }
-  async connect(id: string): Promise<Client> {
+  async connect(id: string): Promise<Transport> {
     const entry = this.entry(id)
     entry.wanted = true
     if (entry.client) return entry.client
@@ -54,7 +59,7 @@ export class SshManager {
     })
     return entry.pending
   }
-  private async establish(id: string, entry: Entry): Promise<Client> {
+  private async establish(id: string, entry: Entry): Promise<Transport> {
     const host = this.store.host(id)
     entry.status = {
       hostId: id,
@@ -62,77 +67,88 @@ export class SshManager {
       message: ''
     }
     this.changed()
-    let connection: Client | undefined
+    let connection: Transport | undefined
     try {
-      const secret = this.store.secret(id)
-      const config: ConnectConfig = {
-        host: host.hostname,
-        port: host.port,
-        username: host.username,
-        readyTimeout: 30000,
-        keepaliveInterval: 15000,
-        keepaliveCountMax: 3,
-        hostVerifier: (key: Buffer, callback: (valid: boolean) => void) => {
-          const fingerprint = `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`
-          const identity = `${host.hostname}:${host.port}`
-          const previous = this.store.fingerprint(identity)
-          if (previous) {
-            if (previous !== fingerprint)
-              entry.status.message =
-                '主机密钥已改变，连接被拒绝。请通过独立渠道核实服务器。'
-            callback(previous === fingerprint)
-            return
+      if (host.sshAlias) {
+        const native = new OpenSshConnection(
+          host.sshAlias,
+          this.nativeOptions(host)
+        )
+        connection = native
+        entry.dialing = native
+        await native.connect()
+      } else {
+        const secret = this.store.secret(id)
+        const config: ConnectConfig = {
+          host: host.hostname,
+          port: host.port,
+          username: host.username,
+          readyTimeout: 30000,
+          keepaliveInterval: 15000,
+          keepaliveCountMax: 3,
+          hostVerifier: (key: Buffer, callback: (valid: boolean) => void) => {
+            const fingerprint = `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`
+            const identity = `${host.hostname}:${host.port}`
+            const previous = this.store.fingerprint(identity)
+            if (previous) {
+              if (previous !== fingerprint)
+                entry.status.message =
+                  '主机密钥已改变，连接被拒绝。请通过独立渠道核实服务器。'
+              callback(previous === fingerprint)
+              return
+            }
+            void this.trust(host, fingerprint)
+              .then(async (accepted) => {
+                if (accepted) await this.store.trust(identity, fingerprint)
+                callback(accepted)
+              })
+              .catch(() => callback(false))
           }
-          void this.trust(host, fingerprint)
-            .then(async (accepted) => {
-              if (accepted) await this.store.trust(identity, fingerprint)
-              callback(accepted)
-            })
-            .catch(() => callback(false))
         }
-      }
-      if (host.auth === 'password') {
-        if (!secret) throw new Error('请编辑主机并填写 SSH 密码')
-        config.password = secret
-      }
-      if (host.auth === 'key') {
-        if (!host.privateKeyPath) throw new Error('请选择 SSH 私钥文件')
-        config.privateKey = await readFile(
-          host.privateKeyPath.replace(/^~(?=\/)/, homedir())
-        )
-        if (secret) config.passphrase = secret
-      }
-      if (host.auth === 'agent') {
-        const agent =
-          process.env.SSH_AUTH_SOCK ||
-          (process.platform === 'win32'
-            ? String.raw`\\.\pipe\openssh-ssh-agent`
-            : undefined)
-        if (!agent)
-          throw new Error('没有可用的 SSH agent；请添加密钥或改用私钥文件')
-        config.agent = agent
-      }
-      if (host.jumpHostId)
-        config.sock = await this.forward(
-          host.jumpHostId,
-          host.hostname,
-          host.port
-        )
-      if (!entry.wanted) throw new Error('连接已取消')
-      connection = new Client()
-      entry.dialing = connection
-      const client = connection
-      await new Promise<void>((resolve, reject) => {
-        const error = (err: Error): void => reject(err)
-        client.once('error', error)
-        client.once('close', () => reject(new Error('SSH 连接已关闭')))
-        client.once('ready', () => {
-          client.removeListener('error', error)
-          resolve()
+        if (host.auth === 'password') {
+          if (!secret) throw new Error('请编辑主机并填写 SSH 密码')
+          config.password = secret
+        }
+        if (host.auth === 'key') {
+          if (!host.privateKeyPath) throw new Error('请选择 SSH 私钥文件')
+          config.privateKey = await readFile(
+            host.privateKeyPath.replace(/^~(?=\/)/, homedir())
+          )
+          if (secret) config.passphrase = secret
+        }
+        if (host.auth === 'agent') {
+          const agent =
+            process.env.SSH_AUTH_SOCK ||
+            (process.platform === 'win32'
+              ? String.raw`\\.\pipe\openssh-ssh-agent`
+              : undefined)
+          if (!agent)
+            throw new Error('没有可用的 SSH agent；请添加密钥或改用私钥文件')
+          config.agent = agent
+        }
+        if (host.jumpHostId)
+          config.sock = await this.forward(
+            host.jumpHostId,
+            host.hostname,
+            host.port
+          )
+        if (!entry.wanted) throw new Error('连接已取消')
+        connection = new Client()
+        entry.dialing = connection
+        const client = connection
+        await new Promise<void>((resolve, reject) => {
+          const error = (err: Error): void => reject(err)
+          client.once('error', error)
+          client.once('close', () => reject(new Error('SSH 连接已关闭')))
+          client.once('ready', () => {
+            client.removeListener('error', error)
+            resolve()
+          })
+          client.on('error', () => {})
+          client.connect(config)
         })
-        client.on('error', () => {})
-        client.connect(config)
-      })
+      }
+      const client = connection!
       if (!entry.wanted) {
         client.end()
         throw new Error('连接已取消')
@@ -200,12 +216,10 @@ export class SshManager {
   close(): void {
     for (const id of this.entries.keys()) this.disconnect(id)
   }
-  async forward(
-    id: string,
-    hostname: string,
-    port: number
-  ): Promise<ClientChannel> {
+  async forward(id: string, hostname: string, port: number): Promise<Duplex> {
     const client = await this.connect(id)
+    if (client instanceof OpenSshConnection)
+      return client.forward(hostname, port)
     return new Promise((resolve, reject) => {
       let expired = false
       const timer = setTimeout(() => {
@@ -232,6 +246,8 @@ export class SshManager {
     timeout = 20000
   ): Promise<{ stdout: string; stderr: string; code: number }> {
     const client = await this.connect(id)
+    if (client instanceof OpenSshConnection)
+      return client.exec(command, timeout)
     return new Promise((resolve, reject) => {
       let stream: ClientChannel | undefined
       const timer = setTimeout(() => {

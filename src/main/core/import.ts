@@ -55,7 +55,7 @@ export async function configAliases(
     aliases = new Set<string>()
   async function visit(path: string, depth: number): Promise<void> {
     if (depth > 16 || visited.size >= 256)
-      throw new Error('SSH Include 层级或文件数量过多，请手动配置此主机')
+      throw new Error('SSH Include 层级或文件数量过多，请检查 Include 配置')
     let canonical: string
     try {
       canonical = await realpath(path)
@@ -94,72 +94,33 @@ export async function configAliases(
   await visit(configPath, 0)
   return [...aliases]
 }
-export async function resolveImportedHost(
+// Metadata is for display only. Connections pass the alias to system OpenSSH.
+export function resolveImportedHost(
   name: string,
-  output: string,
-  home: string
-): Promise<ImportedHost> {
-  const fields = new Map<string, string[]>()
+  output: string
+): ImportedHost {
+  const fields = new Map<string, string>()
   for (const line of output.split('\n')) {
     const match = line.match(/^(\S+)\s+(.*)$/)
-    if (match) fields.set(match[1], [...(fields.get(match[1]) || []), match[2]])
+    if (match && !fields.has(match[1])) fields.set(match[1], match[2])
   }
-  const first = (key: string): string => fields.get(key)?.[0] || ''
-  const hostname = first('hostname') || name,
-    username = first('user') || userInfo().username
-  const port = Number(first('port') || 22)
-  const candidates = (fields.get('identityfile') || [])
-    .filter((value) => value !== 'none')
-    .map((path) =>
-      expandHome(path, home).replace(
-        /%([%hrnp])/g,
-        (_token, key: string) =>
-          ({ '%': '%', h: hostname, r: username, n: name, p: String(port) })[
-            key
-          ] || ''
-      )
-    )
-  let privateKeyPath = ''
-  for (const path of candidates) {
-    try {
-      if ((await stat(path)).isFile()) {
-        privateKeyPath = path
-        break
-      }
-    } catch {
-      /* ssh may list nonexistent default keys */
-    }
-  }
-  const warnings: string[] = []
-  const proxyJump = first('proxyjump') === 'none' ? '' : first('proxyjump')
-  if (proxyJump)
-    warnings.push(`跳板配置：${proxyJump}。请确认下方已选择对应的已保存主机。`)
-  if (first('proxycommand') && first('proxycommand') !== 'none')
-    warnings.push('此主机使用 ProxyCommand，当前需手动设置等效跳板主机。')
-  if (
-    first('identityagent') &&
-    !['none', 'SSH_AUTH_SOCK'].includes(first('identityagent'))
-  )
-    warnings.push(
-      '此主机使用自定义 IdentityAgent；当前 agent 模式使用系统 SSH_AUTH_SOCK，请核对认证方式。'
-    )
-  if (first('identitiesonly') === 'yes' && !privateKeyPath) {
-    privateKeyPath = candidates[0] || ''
-    warnings.push('未找到配置对应的本机私钥，请选择可用私钥或调整认证方式。')
-  }
+  const route =
+    fields.get('proxycommand') && fields.get('proxycommand') !== 'none'
+      ? 'ProxyCommand · 由系统 SSH 执行'
+      : fields.get('proxyjump') && fields.get('proxyjump') !== 'none'
+        ? `ProxyJump · ${fields.get('proxyjump')}`
+        : ''
   return {
     name,
-    hostname,
-    port,
-    username,
-    privateKeyPath,
-    auth: privateKeyPath ? 'key' : 'agent',
-    proxyJump,
-    warning: warnings.join(' ')
+    hostname: fields.get('hostname') || name,
+    port: Number(fields.get('port') || 22),
+    username: fields.get('user') || userInfo().username,
+    note: route
   }
 }
 export async function importSshConfig(
   options: {
+    env?: NodeJS.ProcessEnv
     home?: string
     configPath?: string
     resolveHost?: (name: string) => Promise<string>
@@ -176,8 +137,17 @@ export async function importSshConfig(
       const args = options.configPath
         ? ['-F', resolve(configPath), '-G', name]
         : ['-G', name]
-      return (await exec('ssh', args, { timeout: 5000, maxBuffer: 256 * 1024 }))
-        .stdout
+      return (
+        await exec(
+          process.platform === 'win32' ? 'ssh' : '/usr/bin/ssh',
+          args,
+          {
+            timeout: 5000,
+            maxBuffer: 256 * 1024,
+            env: options.env || process.env
+          }
+        )
+      ).stdout
     })
   await Promise.all(
     Array.from({ length: Math.min(4, aliases.length) }, async () => {
@@ -185,22 +155,14 @@ export async function importSshConfig(
         const index = next++,
           name = aliases[index]
         try {
-          result[index] = await resolveImportedHost(
-            name,
-            await resolver(name),
-            home
-          )
+          result[index] = await resolveImportedHost(name, await resolver(name))
         } catch {
           result[index] = {
             name,
             hostname: name,
             port: 22,
-            username: '',
-            privateKeyPath: '',
-            auth: 'agent',
-            proxyJump: '',
-            error: '配置解析失败',
-            warning: '无法解析此主机的 SSH 配置，请检查配置后刷新，或手动添加。'
+            username: userInfo().username,
+            note: '暂时无法读取连接摘要；连接时由系统 SSH 解析原配置。'
           }
         }
       }

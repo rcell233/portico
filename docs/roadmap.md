@@ -21,7 +21,8 @@
 
 - [ ] 使用用户实际服务器验证 TensorBoard / JupyterLab 环境
 - [x] SSH Config 优先添加、Include 枚举、搜索与重复主机提示
-- [ ] SSH MFA、ProxyCommand 等高级配置兼容
+- [x] 系统 OpenSSH 按别名连接、ProxyCommand / ProxyJump、原生认证提示与 known_hosts
+- [ ] Windows 本机 OpenSSH 模式与需交互终端的代理登录
 - [ ] 可配置的跨域资源、SSO 与 HTTP Basic 网页认证
 - [ ] 工作区会话恢复、批量导入导出与服务日志轮转
 - [ ] macOS 签名、公证与自动更新

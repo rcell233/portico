@@ -9,8 +9,8 @@ Portico 是一个基于 Electron 的远程 Web 应用工作台。通过 SSH 连�
 ## 已实现
 
 - 主机与应用的新增、编辑、删除、搜索和加密持久化。
-- SSH agent、私钥（可带口令）、密码认证，以及使用已保存主机作为跳板。
-- 首次连接确认 SHA-256 主机指纹，拒绝已记录密钥的变化；连接复用、保活和断线重连。
+- 本机 SSH Config 主机直接由系统 OpenSSH 连接：ProxyCommand、ProxyJump、IdentityAgent、证书和多密钥按原配置处理。手动主机保留 agent、私钥、密码和已保存跳板机。
+- 本机配置连接沿用 OpenSSH 的 known_hosts 与认证规则；认证提示在应用内完成。手动主机单独保存指纹。支持连接复用和断线重连。
 - 添加主机优先从 `~/.ssh/config` 选择，支持 Include、搜索和已添加标记；也可手动配置。
 - Linux 监听端口发现（`ss` / `netstat`），选择服务保存为应用。
 - 独立 WebContentsView 标签页，HTTP / HTTPS / WebSocket 通过 SSH 访问。
@@ -41,7 +41,7 @@ npm run dev
 
 ## 第一次使用
 
-1. 点击添加 SSH 主机，优先从本机 SSH Config 列表选择并确认配置；列表中没有时选择“手动配置”。agent 模式需先在系统 agent 中加载密钥。
+1. 点击添加 SSH 主机，从本机 SSH Config 列表点击 Host 即可添加，不需要重新填写连接配置；列表中没有时选择“手动配置”。
 2. 核对首次连接提示中的主机指纹。跳板机本身也需要独立核对。
 3. 添加应用，填写**从远端主机访问的**地址与端口。例如 TensorBoard 通常为 `127.0.0.1:6006`。
 4. 如果需要，启用按需启动，填写命令、工作目录和环境。默认只连接已有服务。
@@ -61,8 +61,9 @@ Jupyter 保持原有身份验证。可以在日志中查看 token，通过 Jupyt
 - 启动命令应在前台运行，推荐 `exec ...`，不要加 `&` 或自行 daemonize。Portico 使用独立进程会话和远端日志文件保活。
 - 只会停止经过 PID、进程出生时间和应用标记校验的托管进程组。外部启动的服务不被停止。
 - 应用代理只允许已配置的服务地址/端口；跨域 SSO、外部 CDN、跳转到其他端口暂不支持。
-- HTTPS 正常验证证书，不绕过自签名证书错误。SSH keyboard-interactive / MFA、任意 ProxyCommand 暂不支持。
-- SSH config 支持 Include 中明确命名的 Host，通过 `ssh -G` 解析配置。单一 ProxyJump 别名可匹配已保存的同名主机；复杂跳板链和 ProxyCommand 仍需手动调整。
+- HTTPS 正常验证证书，不绕过自签名证书错误。本机 SSH Config 的认证由系统 OpenSSH 处理，密码、私钥口令与 keyboard-interactive 提示通过 SSH_ASKPASS 接入界面，不保存响应。
+- SSH Config 中的 Host 只保存别名引用，`ssh -G` 仅用于列表摘要。每次重新连接读取当前原配置，支持 Include、ProxyCommand 和 ProxyJump；不转换为 Portico 的手动认证配置。
+- 本机配置模式当前支持 macOS / Linux OpenSSH；Portico 管理自己的连接复用套接字，禁用配置中的额外端口转发、远程登录命令和 TTY 分配，以建立应用通道。需要交互式终端的第三方代理登录工具仍应先在终端完成登录。
 - 自动发现的是 TCP 监听端口，不保证每个端口都是 Web 应用。其他用户或容器网络内的进程可能不可见。
 - 自动启动只在端口未连接时进行。端口上已有服务但健康检查失败时不会重复启动；可设置“预期响应文本”检查应用身份。
 - macOS 使用系统钥匙串保护配置。Linux 必须有 Secret Service 等安全存储，不回退到明文。

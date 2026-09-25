@@ -48,7 +48,7 @@ type Modal =
   | { kind: 'app'; app: RemoteApp }
   | { kind: 'discover'; host: Host; data?: Discovery }
   | { kind: 'logs'; app: RemoteApp; text?: string }
-  | { kind: 'import' }
+  | { kind: 'import'; replace?: Host }
   | {
       kind: 'confirm'
       title: string
@@ -189,27 +189,24 @@ function App(): React.JSX.Element {
     setError('')
     void show({ kind: 'import' })
   }
-  const selectConfigHost = (h: ImportedHost): void => {
-    const jump =
-      h.proxyJump && !h.proxyJump.includes(',')
-        ? workspace.hosts.find((saved) => saved.name === h.proxyJump)
-        : undefined
-    setModal({
-      kind: 'host',
-      adding: true,
-      warning: h.warning,
-      host: {
-        id: crypto.randomUUID(),
-        name: h.name,
-        hostname: h.hostname,
-        port: h.port,
-        username: h.username,
-        privateKeyPath: h.privateKeyPath,
-        auth: h.auth,
-        jumpHostId: jump?.id || '',
-        hasSecret: false
-      }
+  const selectConfigHost = async (h: ImportedHost): Promise<void> => {
+    const id =
+      modal?.kind === 'import' && modal.replace
+        ? modal.replace.id
+        : crypto.randomUUID()
+    await api.saveHost({
+      id,
+      name: h.name,
+      sshAlias: h.name,
+      hostname: h.hostname,
+      port: h.port,
+      username: h.username,
+      privateKeyPath: '',
+      auth: 'agent',
+      jumpHostId: ''
     })
+    setSelectedHost(id)
+    await close()
   }
   return (
     <div className="workspace">
@@ -786,6 +783,9 @@ function App(): React.JSX.Element {
                   key={modal.host?.id || 'manual'}
                   host={modal.host}
                   hosts={workspace.hosts}
+                  useConfig={() =>
+                    setModal({ kind: 'import', replace: modal.host })
+                  }
                   save={async (value) => {
                     await api.saveHost(value)
                     await close()
@@ -887,7 +887,9 @@ function App(): React.JSX.Element {
             )}
             {modal.kind === 'import' && (
               <HostPicker
-                saved={workspace.hosts}
+                saved={workspace.hosts.filter(
+                  (h) => h.id !== modal.replace?.id
+                )}
                 select={selectConfigHost}
                 manual={() => setModal({ kind: 'host', adding: true })}
               />

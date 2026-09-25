@@ -97,6 +97,12 @@ export class Store {
   saveHost(input: HostInput): Promise<void> {
     const value = hostSchema.parse(input)
     return this.mutate((d) => {
+      if (value.sshAlias) {
+        value.jumpHostId = ''
+        value.privateKeyPath = ''
+        value.auth = 'agent'
+        value.secret = ''
+      }
       let parent = value.jumpHostId
       const visited = new Set([value.id])
       while (parent) {
