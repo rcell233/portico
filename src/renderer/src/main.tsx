@@ -350,35 +350,99 @@ function App(): React.JSX.Element {
                 <ArrowLeft size={16} />
               </button>
             )}
-            {workspace.tabs.map((tab) => (
-              <div
-                className={`tab ${current?.appId === tab.appId ? 'active' : ''}`}
-                key={tab.appId}
-              >
-                <button
-                  onClick={() =>
-                    void run('tab', () => api.activateTab(tab.appId))
-                  }
+            <div className="tab-list">
+              {workspace.tabs.map((tab) => (
+                <div
+                  className={`tab ${current?.appId === tab.appId ? 'active' : ''}`}
+                  key={tab.appId}
                 >
-                  {tab.status === 'opening' ? (
-                    <LoaderCircle size={14} className="spin" />
-                  ) : (
-                    <Globe2 size={14} />
-                  )}
-                  <span>{tab.title}</span>
+                  <button
+                    onClick={() =>
+                      void run('tab', () => api.activateTab(tab.appId))
+                    }
+                  >
+                    {tab.status === 'opening' ? (
+                      <LoaderCircle size={14} className="spin" />
+                    ) : (
+                      <Globe2 size={14} />
+                    )}
+                    <span title={tab.title}>{tab.title}</span>
+                    <i
+                      className={`dot ${tab.status === 'ready' ? 'connected' : tab.status === 'error' ? 'error' : 'connecting'}`}
+                      title={tab.message}
+                      aria-label={tab.message}
+                    />
+                  </button>
+                  <button
+                    title={`关闭 ${tab.title}`}
+                    className="tab-close"
+                    onClick={() =>
+                      void run('close', () => api.closeTab(tab.appId))
+                    }
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {current && (
+              <div className="tab-actions">
+                <div className="row-actions">
+                  <button
+                    className="icon-button"
+                    title="后退"
+                    disabled={!current.canGoBack}
+                    onClick={() => void api.navigate('back')}
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    title="前进"
+                    disabled={!current.canGoForward}
+                    onClick={() => void api.navigate('forward')}
+                  >
+                    <ArrowRight size={16} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    title="刷新"
+                    onClick={() =>
+                      void run('reload', () =>
+                        current.status === 'error'
+                          ? api.openApp(current.appId)
+                          : api.navigate('reload')
+                      )
+                    }
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                </div>
+                <button
+                  className="icon-button"
+                  title="查看日志"
+                  onClick={() => currentApp && logs(currentApp)}
+                >
+                  <FileText size={17} />
                 </button>
                 <button
-                  title={`关闭 ${tab.title}`}
-                  className="tab-close"
+                  className="icon-button"
+                  title="编辑应用"
+                  onClick={() => currentApp && addApp(currentApp)}
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  className="icon-button danger"
+                  title="停止托管服务"
                   onClick={() =>
-                    void run('close', () => api.closeTab(tab.appId))
+                    void run('stop', () => api.stopService(current.appId))
                   }
                 >
-                  <X size={13} />
+                  <Square size={15} />
                 </button>
               </div>
-            ))}
-            <div className="tabbar-space" />
+            )}
           </div>
         )}
         {!current ? (
@@ -623,71 +687,6 @@ function App(): React.JSX.Element {
           </>
         ) : (
           <>
-            <div className="browser-toolbar">
-              <div className="row-actions">
-                <button
-                  className="icon-button"
-                  title="后退"
-                  disabled={!current.canGoBack}
-                  onClick={() => void api.navigate('back')}
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <button
-                  className="icon-button"
-                  title="前进"
-                  disabled={!current.canGoForward}
-                  onClick={() => void api.navigate('forward')}
-                >
-                  <ArrowRight size={16} />
-                </button>
-                <button
-                  className="icon-button"
-                  title="刷新"
-                  onClick={() =>
-                    void run('reload', () =>
-                      current.status === 'error'
-                        ? api.openApp(current.appId)
-                        : api.navigate('reload')
-                    )
-                  }
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-              <div className="url-bar">
-                <ShieldCheck size={14} />
-                <span>
-                  {currentApp?.protocol}://{currentApp?.hostname}:
-                  {currentApp?.port}
-                  {currentApp?.path.split('?')[0]}
-                </span>
-                <small>经 SSH</small>
-              </div>
-              <button
-                className="icon-button"
-                title="查看日志"
-                onClick={() => currentApp && logs(currentApp)}
-              >
-                <FileText size={17} />
-              </button>
-              <button
-                className="icon-button"
-                title="编辑应用"
-                onClick={() => currentApp && addApp(currentApp)}
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                className="icon-button danger"
-                title="停止托管服务"
-                onClick={() =>
-                  void run('stop', () => api.stopService(current.appId))
-                }
-              >
-                <Square size={15} />
-              </button>
-            </div>
             <div className="remote-viewport" ref={viewport}>
               {current.status !== 'ready' && (
                 <div className="connection-state">
@@ -729,15 +728,6 @@ function App(): React.JSX.Element {
                   )}
                 </div>
               )}
-            </div>
-            <div className="browser-status">
-              <i
-                className={`dot ${current.status === 'ready' ? 'connected' : ''}`}
-              />
-              {current.message}
-              <span>
-                {workspace.hosts.find((h) => h.id === currentApp?.hostId)?.name}
-              </span>
             </div>
           </>
         )}

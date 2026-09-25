@@ -220,13 +220,29 @@ main {
   overflow: hidden;
 }
 .tabbar {
-  height: 45px;
+  height: 36px;
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid #e0e4d9;
   background: #eef0e8;
+  overflow: hidden;
+}
+.tab-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+.tab-list .tab {
+  flex-shrink: 0;
+}
+.tab-list .dot {
+  flex-shrink: 0;
 }
 .tab.active {
   background: #f7f7f2;
@@ -276,9 +292,6 @@ main {
   place-items: center;
   padding: 4px;
   color: #929c88;
-}
-.tabbar-space {
-  flex: 1;
 }
 .private-label {
   font-size: 8px;
@@ -634,40 +647,24 @@ footer {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.browser-toolbar {
+.tab-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
-  border-bottom: 1px solid #e3e8d9;
   flex-shrink: 0;
-  height: 60px;
+  gap: 2px;
+  padding: 0 5px;
+  border-left: 1px solid #dde2d6;
 }
-.url-bar {
-  height: 33px;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #edefe5;
-  border: 1px solid #e2e7d7;
-  border-radius: 5px;
-  padding: 0 10px;
-  color: #7e9372;
-  font-size: 11px;
-  min-width: 0;
+.tab-actions .row-actions {
+  gap: 2px;
+  padding-right: 5px;
+  margin-right: 3px;
+  border-right: 1px solid #dde2d6;
 }
-.url-bar span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, monospace;
-}
-.url-bar small {
-  font-size: 9px;
-  white-space: nowrap;
-  color: #96a78a;
+.tab-actions .icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 5px;
 }
 .remote-viewport {
   flex: 1;
@@ -699,20 +696,6 @@ footer {
 }
 .connection-state .row-actions {
   margin-top: 15px;
-}
-.browser-status {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 18px;
-  font-size: 9px;
-  color: #97a38a;
-  border-top: 1px solid #e3e8d9;
-  flex-shrink: 0;
-}
-.browser-status > span {
-  margin-left: auto;
 }
 .modal {
   border: 1px solid #d8dfca;
@@ -1171,7 +1154,7 @@ details[open] {
   align-items: center;
   gap: 8px;
   justify-content: center;
-  width: 44px;
+  width: 36px;
   padding: 0;
   color: #486444;
   background: #eef0e8;
