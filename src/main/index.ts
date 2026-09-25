@@ -163,6 +163,7 @@ function register(): void {
     views?.activate(input === null ? null : idSchema.parse(input))
   )
   handle('bounds', (input) => views?.setBounds(boundsSchema.parse(input)))
+  handle('captureBackground', () => views?.captureBackground())
   handle('overlay', (input) => views?.overlay(z.boolean().parse(input)))
   handle('navigate', (input) =>
     views?.navigate(z.enum(['back', 'forward', 'reload']).parse(input))

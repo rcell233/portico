@@ -279,27 +279,30 @@ export class Views {
     this.area = bounds
     this.layout()
   }
-  async overlay(visible: boolean): Promise<string | null> {
+  async captureBackground(): Promise<string | null> {
+    if (this.obscured) return this.overlayImage
     const revision = ++this.overlayRevision
-    if (visible && !this.obscured) {
-      const tab = this.active ? this.tabs.get(this.active) : undefined
-      this.overlayImage = null
-      if (tab?.view && tab.state.status === 'ready') {
-        try {
-          const image = await tab.view.webContents.capturePage()
-          if (revision !== this.overlayRevision) return null
-          if (this.tabs.get(this.active || '') === tab && !image.isEmpty())
-            this.overlayImage = image.toDataURL()
-        } catch {
-          // A closed or crashed page has no usable background.
-        }
+    const tab = this.active ? this.tabs.get(this.active) : undefined
+    this.overlayImage = null
+    if (tab?.view && tab.state.status === 'ready') {
+      try {
+        const image = await tab.view.webContents.capturePage()
+        if (revision !== this.overlayRevision) return null
+        if (this.tabs.get(this.active || '') === tab && !image.isEmpty())
+          this.overlayImage = image.toDataURL()
+      } catch {
+        // A closed or crashed page has no usable background.
       }
     }
-    if (revision !== this.overlayRevision) return null
-    this.obscured = visible
-    if (!visible) this.overlayImage = null
-    this.layout()
     return this.overlayImage
+  }
+  overlay(visible: boolean): void {
+    this.obscured = visible
+    if (!visible) {
+      ++this.overlayRevision
+      this.overlayImage = null
+    }
+    this.layout()
   }
   private layout(): void {
     if (this.window.isDestroyed()) return
@@ -362,23 +365,17 @@ export class Views {
     await s.clearAuthCache()
   }
   async confirm(message: string, detail: string): Promise<boolean> {
-    const previous = this.obscured
-    await this.overlay(true)
-    try {
-      return (
-        (
-          await dialog.showMessageBox(this.window, {
-            type: 'warning',
-            message,
-            detail,
-            buttons: ['取消', '确认'],
-            defaultId: 0,
-            cancelId: 0
-          })
-        ).response === 1
-      )
-    } finally {
-      await this.overlay(previous)
-    }
+    return (
+      (
+        await dialog.showMessageBox(this.window, {
+          type: 'warning',
+          message,
+          detail,
+          buttons: ['取消', '确认'],
+          defaultId: 0,
+          cancelId: 0
+        })
+      ).response === 1
+    )
   }
 }

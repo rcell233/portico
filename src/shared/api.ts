@@ -91,7 +91,8 @@ export interface PorticoApi {
   closeTab(id: string): Promise<void>
   activateTab(id: string | null): Promise<void>
   bounds(bounds: Bounds): Promise<void>
-  overlay(visible: boolean): Promise<string | null>
+  captureBackground(): Promise<string | null>
+  overlay(visible: boolean): Promise<void>
   navigate(action: 'back' | 'forward' | 'reload'): Promise<void>
   logs(id: string): Promise<string>
   stopService(id: string): Promise<void>

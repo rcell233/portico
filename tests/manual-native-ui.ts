@@ -117,6 +117,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('portico:closeTab', (_event, id) => views.close(id))
   ipcMain.handle('portico:activateTab', (_event, id) => views.activate(id))
   ipcMain.handle('portico:navigate', (_event, action) => views.navigate(action))
+  ipcMain.handle('portico:captureBackground', () => views.captureBackground())
   ipcMain.handle('portico:overlay', (_event, value) => views.overlay(value))
   ipcMain.handle('portico:bounds', (_event, value) => views.setBounds(value))
   window.on('closed', () => {

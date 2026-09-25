@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { flushSync } from 'react-dom'
 import {
   Activity,
   ArrowLeft,
@@ -29,6 +30,11 @@ import { AppForm, HostForm, newApp } from './components/Forms'
 import { HostPicker, BackToConfig } from './components/HostPicker'
 import logo from '../../../resources/icon.svg'
 import './styles.css'
+// Wait for a committed frame, not a timer, before swapping native/DOM surfaces.
+const painted = (): Promise<void> =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
 const api = window.portico
 const empty: Workspace = {
   hosts: [],
@@ -65,7 +71,8 @@ function App(): React.JSX.Element {
     [error, setError] = useState(''),
     [pending, setPending] = useState<string[]>([])
   const viewport = useRef<HTMLDivElement>(null),
-    dialog = useRef<HTMLDialogElement>(null)
+    dialog = useRef<HTMLDialogElement>(null),
+    modalTransition = useRef(false)
   const run = useCallback(
     async (key: string, action: () => Promise<unknown>): Promise<void> => {
       setPending((p) => [...p, key])
@@ -109,13 +116,38 @@ function App(): React.JSX.Element {
     if (modal && !dialog.current?.open) dialog.current?.showModal()
   }, [modal])
   const show = async (value: Modal): Promise<void> => {
-    setModalBackground(await api.overlay(true))
-    setModal(value)
+    if (modalTransition.current) return
+    modalTransition.current = true
+    try {
+      const background = await api.captureBackground()
+      if (background) {
+        const image = new Image()
+        image.src = background
+        await image.decode()
+      }
+      flushSync(() => {
+        setModalBackground(background)
+        setModal(value)
+      })
+      if (!dialog.current?.open) dialog.current?.showModal()
+      await painted()
+      await api.overlay(true)
+    } finally {
+      modalTransition.current = false
+    }
   }
   const close = async (): Promise<void> => {
-    setModal(null)
-    await api.overlay(false)
-    setModalBackground(null)
+    if (modalTransition.current) return
+    modalTransition.current = true
+    try {
+      // Restore the native page before removing the already-painted backdrop.
+      await api.overlay(false)
+      await painted()
+      setModal(null)
+      setModalBackground(null)
+    } finally {
+      modalTransition.current = false
+    }
   }
   const home = (): void => {
     void run('home', () => api.activateTab(null))

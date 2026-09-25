@@ -18,6 +18,7 @@ const api: PorticoApi = {
   closeTab: (id) => invoke('closeTab', id),
   activateTab: (id) => invoke('activateTab', id),
   bounds: (value) => invoke('bounds', value),
+  captureBackground: () => invoke('captureBackground'),
   overlay: (value) => invoke('overlay', value),
   navigate: (action) => invoke('navigate', action),
   logs: (id) => invoke('logs', id),
