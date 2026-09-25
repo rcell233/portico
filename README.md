@@ -1,47 +1,90 @@
 # Portico
 
+<img src="resources/icon.svg" width="88" alt="Portico" />
+
 **Your remote apps, one doorway.**
 
-Portico 是一个基于 Electron 的远程 Web 应用工作台。目标是通过 SSH 连接多台服务器，将 TensorBoard、JupyterLab 等服务保存为应用，在桌面内直接访问，并按需启动远程服务。
+Portico 是一个基于 Electron 的远程 Web 应用工作台。通过 SSH 连接多台服务器，将 TensorBoard、JupyterLab 等服务保存为应用，在独立桌面标签页内直接使用。
 
-## 当前状态
+## 已实现
 
-项目初始化阶段。已实现可运行的桌面欢迎页、路线图导航、隔离的 preload 桥接、TypeScript 检查、开发热更新、生产构建和 CI。
+- 主机与应用的新增、编辑、删除、搜索和加密持久化。
+- SSH agent、私钥（可带口令）、密码认证，以及使用已保存主机作为跳板。
+- 首次连接确认 SHA-256 主机指纹，拒绝已记录密钥的变化；连接复用、保活和断线重连。
+- 从 `~/.ssh/config` 导入明确命名的 Host，再调整认证或跳板配置。
+- Linux 监听端口发现（`ss` / `netstat`），选择服务保存为应用。
+- 独立 WebContentsView 标签页，HTTP / HTTPS / WebSocket 通过 SSH 访问。
+- 每个应用独立的持久化 Cookie / 登录会话，浏览器前进、后退、刷新和文件下载。
+- 按需启动命令、工作目录、环境变量、健康检查、启动超时、日志查看和安全停止托管进程。
+- TensorBoard、JupyterLab、Streamlit 配置模板。
+- SVG 图标及其 PNG / ICNS / ICO 导出，Mac 启动默认最大化普通窗口，不进入系统全屏。
 
-**SSH 连接、配置持久化、端口发现、远程网页及服务启动尚未实现。** 当前界面不包含假连接或模拟在线服务。
+## 开发与运行
 
-## 本地开发
-
-需要 Node.js 24（参见 `.nvmrc`）和 npm。
+需要 Node.js 24（`.nvmrc`）和 npm。
 
 ```sh
 npm ci
 npm run dev
 ```
 
-| 命令             | 用途                         |
-| ---------------- | ---------------------------- |
-| `npm run dev`    | 启动 Electron 开发模式       |
-| `npm run check`  | 格式、类型和生产构建检查     |
-| `npm run start`  | 运行已构建的桌面应用         |
-| `npm run pack`   | 生成当前平台未打包的应用目录 |
-| `npm run dist`   | 生成当前平台安装包           |
-| `npm run format` | 格式化源码和文档             |
+| 命令             | 用途                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| `npm run dev`    | 桌面开发，主进程和界面自动重载                                  |
+| `npm run check`  | 格式检查、集成测试、类型检查和生产构建                          |
+| `npm test`       | 使用临时本机 SSH 服务器测试；Linux 还会验证真实后台进程生命周期 |
+| `npm run start`  | 构建并运行生产界面                                              |
+| `npm run icons`  | 从 SVG 重新生成平台图标                                         |
+| `npm run pack`   | 当前平台的未打包应用目录                                        |
+| `npm run dist`   | 当前平台安装包                                                  |
+| `npm run format` | 格式化源码和文档                                                |
 
-打包配置已提供；跨平台安装包、签名、公证和自动更新尚未验证或配置。首次构建使用 Electron 默认图标。
+## 第一次使用
 
-## 项目结构
+1. 添加 SSH 主机。私钥模式填写文件位置；agent 模式先在系统 agent 中加载密钥。
+2. 核对首次连接提示中的主机指纹。跳板机本身也需要独立核对。
+3. 添加应用，填写**从远端主机访问的**地址与端口。例如 TensorBoard 通常为 `127.0.0.1:6006`。
+4. 如果需要，启用按需启动，填写命令、工作目录和环境。默认只连接已有服务。
+5. 打开应用。关闭标签页或退出 Portico 后，远端托管服务继续运行。
 
-```text
-src/main/       Electron 主进程，未来负责 SSH、服务生命周期与存储
-src/preload/    最小权限的桌面 API 桥接
-src/renderer/   React 工作空间界面
-src/shared/     进程间共享类型
-docs/           架构与功能路线图
+示例：工作目录 `/home/me/project`，启动命令：
+
+```sh
+exec /home/me/venv/bin/tensorboard --logdir ./runs --host 127.0.0.1 --port 6006
 ```
 
-参见 [架构设计](docs/architecture.md) 和 [路线图](docs/roadmap.md)。
+Jupyter 保持原有身份验证。可以在日志中查看 token，通过 Jupyter 登录页面输入，或填入应用路径 `/lab?token=…`。路径和环境变量也包含在加密配置中。
 
-## 仓库与许可
+## 运行边界
 
-初始仓库为私有仓库，尚未选择开源许可证（`UNLICENSED`）。公开发布前再决定许可证。
+- 托管启动/停止要求远端 **Linux + Python 3 + Bash**；发现端口要求 `ss` 或 `netstat`。纯网页访问只要求 SSH 服务器允许 TCP 转发。
+- 启动命令应在前台运行，推荐 `exec ...`，不要加 `&` 或自行 daemonize。Portico 使用独立进程会话和远端日志文件保活。
+- 只会停止经过 PID、进程出生时间和应用标记校验的托管进程组。外部启动的服务不被停止。
+- 应用代理只允许已配置的服务地址/端口；跨域 SSO、外部 CDN、跳转到其他端口暂不支持。
+- HTTPS 正常验证证书，不绕过自签名证书错误。SSH keyboard-interactive / MFA、任意 ProxyCommand 暂不支持。
+- SSH config 导入不枚举 Include 文件内的 Host，也不会自动转换 ProxyJump/ProxyCommand；界面会提示手动选择跳板。
+- 自动发现的是 TCP 监听端口，不保证每个端口都是 Web 应用。其他用户或容器网络内的进程可能不可见。
+- 自动启动只在端口未连接时进行。端口上已有服务但健康检查失败时不会重复启动；可设置“预期响应文本”检查应用身份。
+- macOS 使用系统钥匙串保护配置。Linux 必须有 Secret Service 等安全存储，不回退到明文。
+- 当前没有安装包签名、公证或自动更新；Windows/Linux 桌面安装包仍需对应平台实测。
+
+## 文件位置与结构
+
+工作空间保存为 Electron userData 目录中的 `workspace.enc`（原子写入、权限 0600、系统安全存储加密）；不会保存私钥文件内容。
+
+远端托管元数据与日志位于 `~/.local/share/portico/services/<app-id>/`。删除本地应用配置不会删除远端文件或停止服务。
+
+```text
+src/main/core/  SSH、加密存储、代理、服务发现和进程生命周期
+src/main/views.ts  隔离网页、代理认证与标签页
+src/preload/    固定类型的 IPC 桥接
+src/renderer/   主机、应用、日志和配置界面
+src/shared/     跨进程类型
+resources/      SVG 源图标与平台导出
+scripts/        图标生成
+tests/         本机 SSH 集成测试与 Linux 生命周期测试
+```
+
+[架构设计](docs/architecture.md) · [路线图](docs/roadmap.md) · [测试说明](docs/testing.md)
+
+私有仓库，尚未选择开源许可证（`UNLICENSED`）。

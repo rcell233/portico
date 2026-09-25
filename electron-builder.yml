@@ -1,15 +1,21 @@
 appId: io.github.rcell233.portico
 productName: Portico
+extraResources:
+  - from: resources
+    to: resources
 directories:
   output: dist
 files:
   - out/**/*
   - package.json
 mac:
+  icon: resources/icon.icns
   category: public.app-category.developer-tools
   target: dmg
 win:
+  icon: resources/icon.ico
   target: nsis
 linux:
+  icon: resources/icon.png
   category: Development
   target: AppImage

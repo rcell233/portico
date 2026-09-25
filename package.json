@@ -1,6 +1,6 @@
 {
   "name": "portico",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Your remote apps, one doorway. An SSH-powered desktop workspace.",
   "main": "./out/main/index.js",
@@ -10,31 +10,41 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && electron-vite build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run format:check && npm run build",
+    "check": "npm run format:check && npm test && npm run build",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "postinstall": "node node_modules/electron/install.js"
+    "postinstall": "node node_modules/electron/install.js",
+    "icons": "node scripts/icons.mjs",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "lucide-react": "^1.48.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "ssh2": "^1.17.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/ssh2": "^1.15.6",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "prettier": "^3.0.0",
+    "sharp": "^0.35.4",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "ws": "^8.21.3"
   }
 }
