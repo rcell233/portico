@@ -1,0 +1,15 @@
+appId: io.github.rcell233.portico
+productName: Portico
+directories:
+  output: dist
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  target: dmg
+win:
+  target: nsis
+linux:
+  category: Development
+  target: AppImage
