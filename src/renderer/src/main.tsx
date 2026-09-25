@@ -209,9 +209,7 @@ function App(): React.JSX.Element {
           }}
         >
           <img src={logo} alt="" />
-          <span>
-            Portico<small>REMOTE WORKSPACE</small>
-          </span>
+          <span>Portico</span>
         </button>
         <button
           className={`nav-item ${!selectedHost && !current ? 'selected' : ''}`}
@@ -332,7 +330,7 @@ function App(): React.JSX.Element {
         <div className="sidebar-footer">
           <div>
             <i className={`dot ${connectedCount ? 'connected' : ''}`} />
-            {connectedCount ? `${connectedCount} 台主机已连接` : '本地工作空间'}
+            {connectedCount ? `${connectedCount} 台主机已连接` : '本地保存'}
           </div>
           <button onClick={() => void show({ kind: 'help' })}>
             <CircleHelp size={14} />
@@ -345,8 +343,7 @@ function App(): React.JSX.Element {
           <div className="tabbar">
             <button
               className={`workspace-return ${!current ? 'active' : ''}`}
-              title="返回工作空间"
-              aria-label="返回工作空间"
+              aria-label="应用库"
               onClick={home}
             >
               <LayoutGrid size={16} />
@@ -380,17 +377,12 @@ function App(): React.JSX.Element {
               </div>
             ))}
             <div className="tabbar-space" />
-            <span className="private-label">
-              <ShieldCheck size={13} /> SSH WORKSPACE
-            </span>
           </div>
         )}
         {!current ? (
           <>
             <header className="library-header">
               <div className="breadcrumb">
-                工作空间
-                <ChevronRight size={13} />
                 <span>{host?.name || '全部应用'}</span>
               </div>
               <div className="header-actions">
@@ -408,7 +400,7 @@ function App(): React.JSX.Element {
                   <p className="intro">
                     {host
                       ? `${host.username}@${host.hostname}:${host.port}`
-                      : '将不同服务器上的工具，汇集到一个安静的工作空间。'}
+                      : '集中访问不同服务器上的应用。'}
                   </p>
                 </div>
                 <div className="library-stats">
@@ -772,7 +764,6 @@ function App(): React.JSX.Element {
         >
           <div className="modal-heading">
             <div>
-              <p className="eyebrow">PORTICO WORKSPACE</p>
               <h2>
                 {modal.kind === 'host'
                   ? modal.adding
@@ -792,7 +783,7 @@ function App(): React.JSX.Element {
                           : '选择 SSH 配置'
                         : modal.kind === 'confirm'
                           ? modal.title
-                          : '关于你的远程工作空间'}
+                          : '关于 Portico'}
               </h2>
             </div>
             <button
