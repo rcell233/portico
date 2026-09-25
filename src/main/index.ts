@@ -4,6 +4,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  Menu,
   safeStorage,
   session
 } from 'electron'
@@ -247,6 +248,28 @@ app.whenReady().then(async () => {
     session.defaultSession.setPermissionCheckHandler(() => false)
     if (process.platform === 'darwin')
       app.dock?.setIcon(nativeImage.createFromPath(resource('icon.png')))
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        ...(process.platform === 'darwin'
+          ? [{ role: 'appMenu' as const }]
+          : []),
+        {
+          label: 'File',
+          submenu: [
+            {
+              label: '关闭标签页',
+              accelerator: 'CmdOrCtrl+W',
+              click: () => views?.closeActive()
+            },
+            { type: 'separator' },
+            { role: 'quit' }
+          ]
+        },
+        { role: 'editMenu' },
+        { role: 'viewMenu' },
+        { role: 'windowMenu' }
+      ])
+    )
     register()
     createWindow()
     app.on('activate', () => {

@@ -4,12 +4,14 @@ import type { Duplex } from 'node:stream'
 import type { Socket } from 'node:net'
 
 export type Dial = () => Promise<Duplex>
-// A credential-gated loopback proxy, restricted to one service. No direct-network fallback.
+// Credential-gated proxy: the saved service always uses SSH; external resources
+// use a separate public-network dialer, never as a fallback for the service.
 export class ServiceProxy {
   readonly username = 'portico'
   readonly password = randomBytes(32).toString('hex')
   private server = http.createServer()
   private sockets = new Set<Duplex>()
+  private closed = false
   private expected = Buffer.from(
     `Basic ${Buffer.from(`${this.username}:${this.password}`).toString('base64')}`
   )
@@ -18,7 +20,8 @@ export class ServiceProxy {
     private hostname: string,
     private remotePort: number,
     private protocol: 'http' | 'https',
-    private dial: Dial
+    private dial: Dial,
+    private externalDial?: (url: URL) => Promise<Duplex>
   ) {
     this.server.on('connection', (socket) => {
       this.sockets.add(socket)
@@ -39,13 +42,13 @@ export class ServiceProxy {
         res.writeHead(400).end()
         return
       }
-      if (!this.allowed(url) || url.protocol !== 'http:') {
+      if (!this.canRequest(url) || url.protocol !== 'http:') {
         res.writeHead(403).end()
         return
       }
-      void this.dial()
+      void this.connect(url)
         .then((channel) => {
-          this.track(channel)
+          if (!this.track(channel)) return
           if (req.destroyed) {
             channel.destroy()
             return
@@ -57,8 +60,8 @@ export class ServiceProxy {
           delete headers['proxy-connection']
           const upstream = http.request(
             {
-              hostname: this.hostname,
-              port: this.remotePort,
+              hostname: url.hostname,
+              port: Number(url.port || 80),
               method: req.method,
               path: url.pathname + url.search,
               headers,
@@ -72,7 +75,11 @@ export class ServiceProxy {
           )
           upstream.on('error', () => {
             if (!res.headersSent) res.writeHead(502)
-            res.end('SSH service unavailable')
+            res.end(
+              this.allowed(url)
+                ? 'SSH service unavailable'
+                : 'External resource unavailable'
+            )
           })
           res.on('close', () => {
             upstream.destroy()
@@ -83,7 +90,11 @@ export class ServiceProxy {
         })
         .catch(() => {
           if (!res.headersSent) res.writeHead(502)
-          res.end('SSH service unavailable')
+          res.end(
+            this.allowed(url)
+              ? 'SSH service unavailable'
+              : 'External resource unavailable'
+          )
         })
     })
     this.server.on('connect', (req, socket, head) => {
@@ -100,13 +111,17 @@ export class ServiceProxy {
         socket.destroy()
         return
       }
-      if (!this.allowed(url)) {
+      if (!this.canRequest(url)) {
         socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n')
         return
       }
-      void this.dial()
+      void this.connect(url)
         .then((channel) => {
-          this.track(channel)
+          if (!this.track(channel)) return
+          if (socket.destroyed) {
+            channel.destroy()
+            return
+          }
           socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
           if (head.length) channel.write(head)
           this.bridge(socket, channel)
@@ -127,13 +142,17 @@ export class ServiceProxy {
         socket.destroy()
         return
       }
-      if (!this.allowed(url) || this.protocol !== 'http') {
+      if (!this.canRequest(url) || !['http:', 'ws:'].includes(url.protocol)) {
         socket.destroy()
         return
       }
-      void this.dial()
+      void this.connect(url)
         .then((channel) => {
-          this.track(channel)
+          if (!this.track(channel)) return
+          if (socket.destroyed) {
+            channel.destroy()
+            return
+          }
           const headers = Object.entries(req.headers)
             .filter(
               ([key]) =>
@@ -170,10 +189,31 @@ export class ServiceProxy {
       ['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)
     )
   }
-  private track(channel: Duplex): void {
+  canRequest(url: URL): boolean {
+    return (
+      this.allowed(url) ||
+      Boolean(
+        this.externalDial &&
+        ['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) &&
+        url.hostname.replace(/^\[|\]$/g, '') !==
+          this.hostname.replace(/^\[|\]$/g, '')
+      )
+    )
+  }
+  private connect(url: URL): Promise<Duplex> {
+    if (this.allowed(url)) return this.dial()
+    if (this.canRequest(url) && this.externalDial) return this.externalDial(url)
+    return Promise.reject(new Error('Destination not allowed'))
+  }
+  private track(channel: Duplex): boolean {
+    if (this.closed) {
+      channel.destroy()
+      return false
+    }
     this.sockets.add(channel)
     channel.on('close', () => this.sockets.delete(channel))
     channel.on('error', () => channel.destroy())
+    return true
   }
   private bridge(a: Duplex, b: Duplex): void {
     a.pipe(b).pipe(a)
@@ -193,6 +233,7 @@ export class ServiceProxy {
     })
   }
   close(): void {
+    this.closed = true
     for (const socket of this.sockets) socket.destroy()
     this.sockets.clear()
     this.server.close()

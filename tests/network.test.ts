@@ -233,3 +233,76 @@ test(
     }
   }
 )
+
+test('external resources route independently without a CDN allowlist or SSH fallback', async () => {
+  const seen: string[] = []
+  const web = http.createServer((req, res) => {
+    assert.equal(req.headers['proxy-authorization'], undefined)
+    res.end(req.headers.host)
+  })
+  await new Promise<void>((resolve) => web.listen(0, '127.0.0.1', resolve))
+  const port = (web.address() as AddressInfo).port
+  const proxy = new ServiceProxy(
+    '127.0.0.1',
+    3000,
+    'http',
+    async () => {
+      throw new Error('SSH unavailable')
+    },
+    async (url) => {
+      seen.push(url.href)
+      return net.connect(port, '127.0.0.1')
+    }
+  )
+  try {
+    await proxy.start()
+    const auth = `Basic ${Buffer.from(`${proxy.username}:${proxy.password}`).toString('base64')}`
+    for (const host of ['assets.example.com', 'fonts.example.org']) {
+      const result = await request(proxy.port, `http://${host}/style.css`, auth)
+      assert.equal(result.status, 200)
+    }
+    assert.equal(
+      (await request(proxy.port, 'http://127.0.0.1:3000/', auth)).status,
+      502
+    )
+    assert.equal(
+      (await request(proxy.port, 'http://127.0.0.1:3001/', auth)).status,
+      403
+    )
+    assert.equal(seen.length, 2)
+    assert.equal(
+      (await request(proxy.port, 'http://assets.example.com/style.css')).status,
+      407
+    )
+    // HTTPS resources use CONNECT; the tunnel must preserve bytes and strip proxy credentials.
+    const response = await new Promise<string>((resolve, reject) => {
+      const socket = net.connect(proxy.port, '127.0.0.1')
+      let data = '',
+        sent = false
+      socket.on('connect', () =>
+        socket.write(
+          `CONNECT assets.example.net:443 HTTP/1.1\r\nHost: assets.example.net:443\r\nProxy-Authorization: ${auth}\r\n\r\n`
+        )
+      )
+      socket.on('data', (chunk) => {
+        data += chunk
+        if (!sent && data.includes('\r\n\r\n')) {
+          sent = true
+          socket.write(
+            'GET / HTTP/1.1\r\nHost: assets.example.net\r\nConnection: close\r\n\r\n'
+          )
+        }
+      })
+      socket.on('end', () => resolve(data))
+      socket.on('error', reject)
+      socket.setTimeout(5000, () => socket.destroy(new Error('timeout')))
+    })
+    assert.match(response, /200 Connection Established/)
+    assert.match(response, /assets.example.net/)
+    assert.equal(seen.at(-1), 'https://assets.example.net/')
+  } finally {
+    proxy.close()
+    web.closeAllConnections()
+    await new Promise<void>((resolve) => web.close(() => resolve()))
+  }
+})

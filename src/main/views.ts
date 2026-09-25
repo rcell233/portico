@@ -4,6 +4,7 @@ import { Store } from './core/store'
 import { SshManager } from './core/ssh'
 import { ServiceManager } from './core/services'
 import { ServiceProxy } from './core/proxy'
+import { dialPublic } from './core/public-network'
 import { appUrl } from './core/schema'
 import { appName, pageName } from '../shared/app-name'
 
@@ -41,7 +42,25 @@ export class Views {
         this.changed()
       }
     })
+    this.bindCloseShortcut(window.webContents)
     window.on('resize', () => this.layout())
+  }
+  private bindCloseShortcut(contents: Electron.WebContents): void {
+    contents.on('before-input-event', (event, input) => {
+      if (
+        input.type === 'keyDown' &&
+        input.key.toLowerCase() === 'w' &&
+        (input.control || input.meta) &&
+        !input.alt &&
+        !input.shift
+      ) {
+        event.preventDefault()
+        this.closeActive()
+      }
+    })
+  }
+  closeActive(): void {
+    if (this.active && !this.obscured) this.close(this.active)
   }
   states(): AppTab[] {
     return [...this.tabs.values()].map((t) => ({ ...t.state }))
@@ -86,7 +105,8 @@ export class Views {
         config.hostname,
         config.port,
         config.protocol,
-        () => this.ssh.forward(config.hostId, config.hostname, config.port)
+        () => this.ssh.forward(config.hostId, config.hostname, config.port),
+        dialPublic
       )
       tab.proxy = proxy
       await proxy.start()
@@ -114,7 +134,7 @@ export class Views {
           const url = new URL(details.url)
           callback({
             cancel: !(
-              ['data:', 'blob:'].includes(url.protocol) || proxy.allowed(url)
+              ['data:', 'blob:'].includes(url.protocol) || proxy.canRequest(url)
             )
           })
         } catch {
@@ -141,6 +161,7 @@ export class Views {
       tab.view = view
       view.setBackgroundColor('#ffffff')
       const contents = view.webContents
+      this.bindCloseShortcut(contents)
       contents.setWindowOpenHandler(({ url }) => {
         try {
           if (proxy.allowed(new URL(url)))
