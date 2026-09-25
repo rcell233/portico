@@ -19,6 +19,10 @@ Portico 是一个基于 Electron 的远程 Web 应用工作台。通过 SSH 连�
 - TensorBoard、JupyterLab、Streamlit 配置模板。
 - SVG 图标及其 PNG / ICNS / ICO 导出，Mac 启动默认最大化普通窗口，不进入系统全屏。
 
+## 下载
+
+在 [GitHub Releases](https://github.com/rcell233/portico/releases) 下载 macOS Apple Silicon（`.dmg`）和 Windows x64（`.exe`）安装包。
+
 ## 开发与运行
 
 需要 Node.js 24（`.nvmrc`）和 npm。
@@ -67,7 +71,7 @@ Jupyter 保持原有身份验证。可以在日志中查看 token，通过 Jupyt
 - 自动发现的是 TCP 监听端口，不保证每个端口都是 Web 应用。其他用户或容器网络内的进程可能不可见。
 - 自动启动只在端口未连接时进行。端口上已有服务但健康检查失败时不会重复启动；可设置“预期响应文本”检查应用身份。
 - macOS 使用系统钥匙串保护配置。Linux 必须有 Secret Service 等安全存储，不回退到明文。
-- 当前没有安装包签名、公证或自动更新；Windows/Linux 桌面安装包仍需对应平台实测。
+- 当前没有安装包签名、公证或自动更新。Windows x64 安装包由 GitHub Actions 构建；Windows 当前使用手动 SSH 配置，原生 SSH Config 连接仅支持 macOS / Linux。Windows 桌面交互与 Linux 安装包尚未完成实机验证。
 
 ## 文件位置与结构
 
@@ -88,4 +92,4 @@ tests/         本机 SSH 集成测试与 Linux 生命周期测试
 
 [架构设计](docs/architecture.md) · [路线图](docs/roadmap.md) · [测试说明](docs/testing.md)
 
-私有仓库，尚未选择开源许可证（`UNLICENSED`）。
+仓库公开可查看，尚未选择开源许可证（`UNLICENSED`）。

@@ -1,0 +1,27 @@
+name: Release build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Test portable core
+        run: npx tsx --test tests/core.test.ts tests/public-network.test.ts
+      - name: Build Windows x64 installer
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: portico-windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
