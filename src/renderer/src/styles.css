@@ -1183,9 +1183,6 @@ details[open] {
   left: 0;
   z-index: 1;
 }
-.workspace-return.active {
-  background: #f7f7f2;
-}
 .picker-section-label {
   font-size: 11px;
   color: #829177;

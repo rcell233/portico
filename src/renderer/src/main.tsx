@@ -341,13 +341,15 @@ function App(): React.JSX.Element {
       <main>
         {workspace.tabs.length > 0 && (
           <div className="tabbar">
-            <button
-              className={`workspace-return ${!current ? 'active' : ''}`}
-              aria-label="应用库"
-              onClick={home}
-            >
-              <LayoutGrid size={16} />
-            </button>
+            {current && (
+              <button
+                className="workspace-return"
+                aria-label="返回"
+                onClick={home}
+              >
+                <ArrowLeft size={16} />
+              </button>
+            )}
             {workspace.tabs.map((tab) => (
               <div
                 className={`tab ${current?.appId === tab.appId ? 'active' : ''}`}
