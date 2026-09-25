@@ -61,6 +61,7 @@ function App(): React.JSX.Element {
     [selectedHost, setSelectedHost] = useState(''),
     [query, setQuery] = useState('')
   const [modal, setModal] = useState<Modal | null>(null),
+    [modalBackground, setModalBackground] = useState<string | null>(null),
     [error, setError] = useState(''),
     [pending, setPending] = useState<string[]>([])
   const viewport = useRef<HTMLDivElement>(null),
@@ -108,12 +109,13 @@ function App(): React.JSX.Element {
     if (modal && !dialog.current?.open) dialog.current?.showModal()
   }, [modal])
   const show = async (value: Modal): Promise<void> => {
-    await api.overlay(true)
+    setModalBackground(await api.overlay(true))
     setModal(value)
   }
   const close = async (): Promise<void> => {
     setModal(null)
     await api.overlay(false)
+    setModalBackground(null)
   }
   const home = (): void => {
     void run('home', () => api.activateTab(null))
@@ -688,6 +690,14 @@ function App(): React.JSX.Element {
         ) : (
           <>
             <div className="remote-viewport" ref={viewport}>
+              {modalBackground && (
+                <img
+                  className="modal-page-background"
+                  src={modalBackground}
+                  alt=""
+                  aria-hidden="true"
+                />
+              )}
               {current.status !== 'ready' && (
                 <div className="connection-state">
                   {current.status === 'opening' ? (

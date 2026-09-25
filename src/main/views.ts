@@ -14,6 +14,8 @@ export class Views {
   active: string | null = null
   private area: Bounds = { x: 232, y: 180, width: 700, height: 500 }
   private obscured = false
+  private overlayImage: string | null = null
+  private overlayRevision = 0
   constructor(
     private window: BrowserWindow,
     private store: Store,
@@ -277,9 +279,27 @@ export class Views {
     this.area = bounds
     this.layout()
   }
-  overlay(visible: boolean): void {
+  async overlay(visible: boolean): Promise<string | null> {
+    const revision = ++this.overlayRevision
+    if (visible && !this.obscured) {
+      const tab = this.active ? this.tabs.get(this.active) : undefined
+      this.overlayImage = null
+      if (tab?.view && tab.state.status === 'ready') {
+        try {
+          const image = await tab.view.webContents.capturePage()
+          if (revision !== this.overlayRevision) return null
+          if (this.tabs.get(this.active || '') === tab && !image.isEmpty())
+            this.overlayImage = image.toDataURL()
+        } catch {
+          // A closed or crashed page has no usable background.
+        }
+      }
+    }
+    if (revision !== this.overlayRevision) return null
     this.obscured = visible
+    if (!visible) this.overlayImage = null
     this.layout()
+    return this.overlayImage
   }
   private layout(): void {
     if (this.window.isDestroyed()) return
@@ -343,7 +363,7 @@ export class Views {
   }
   async confirm(message: string, detail: string): Promise<boolean> {
     const previous = this.obscured
-    this.overlay(true)
+    await this.overlay(true)
     try {
       return (
         (
@@ -358,7 +378,7 @@ export class Views {
         ).response === 1
       )
     } finally {
-      this.overlay(previous)
+      await this.overlay(previous)
     }
   }
 }
