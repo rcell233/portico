@@ -14,10 +14,12 @@ import type { Host, ImportedHost } from '../../../shared/api'
 export function HostPicker({
   saved,
   select,
+  selectSaved,
   manual
 }: {
   saved: Host[]
   select: (host: ImportedHost) => Promise<void>
+  selectSaved?: (host: Host) => void
   manual: () => void
 }): React.JSX.Element {
   const [saving, setSaving] = useState('')
@@ -52,7 +54,15 @@ export function HostPicker({
       current = false
     }
   }, [revision])
-  const matches = hosts.filter((h) =>
+  const savedMatches = saved.filter((h) =>
+    `${h.name} ${h.hostname} ${h.username}`
+      .toLowerCase()
+      .includes(query.toLowerCase())
+  )
+  const available = selectSaved
+    ? hosts.filter((h) => !saved.some((s) => s.sshAlias === h.name))
+    : hosts
+  const matches = available.filter((h) =>
     `${h.name} ${h.hostname} ${h.username}`
       .toLowerCase()
       .includes(query.toLowerCase())
@@ -75,7 +85,9 @@ export function HostPicker({
         </button>
       </div>
       <p className="intro">
-        选择即添加。连接时直接使用本机 SSH 配置，包括代理、跳板和认证方式。
+        {selectSaved
+          ? '先选主机，下一步选择要打开的服务端口。SSH Config 中的代理和认证设置会直接沿用。'
+          : '连接时直接使用本机 SSH 配置，包括代理、跳板和认证方式。'}
       </p>
       <label className="search config-search">
         <Search size={16} />
@@ -87,6 +99,30 @@ export function HostPicker({
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
+      {selectSaved && savedMatches.length > 0 && (
+        <>
+          <p className="picker-section-label">工作空间中的主机</p>
+          <div className="service-list config-list saved-hosts">
+            {savedMatches.map((host) => (
+              <button
+                key={host.id}
+                disabled={Boolean(saving)}
+                onClick={() => selectSaved(host)}
+              >
+                <Server size={19} />
+                <span>
+                  <strong>{host.name}</strong>
+                  <small>
+                    {host.username}@{host.hostname}:{host.port}
+                  </small>
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {selectSaved && <p className="picker-section-label">本机 SSH Config</p>}
       {loading ? (
         <div className="loading">
           <LoaderCircle size={22} className="spin" />
@@ -100,10 +136,14 @@ export function HostPicker({
             重新读取
           </button>
         </div>
-      ) : !hosts.length ? (
+      ) : !available.length ? (
         <div className="config-empty">
           <Server size={25} />
-          <strong>本机 SSH 配置中还没有主机</strong>
+          <strong>
+            {hosts.length
+              ? '配置中的主机已在工作空间中'
+              : '本机 SSH 配置中还没有主机'}
+          </strong>
           <p>可以先在 ~/.ssh/config 中添加 Host，也可以手动配置。</p>
         </div>
       ) : (

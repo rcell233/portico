@@ -78,3 +78,37 @@ test('reject unsafe or incomplete application configuration', () => {
   )
   assert.equal(appUrl({ ...app, hostname: '::1' }), 'http://[::1]:6006/')
 })
+
+test('unnamed apps adopt the first page title once, persist it, and never overwrite edits', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'portico-name-'))
+  try {
+    const store = new Store(directory, cipher)
+    await store.load()
+    const server = host()
+    await store.saveHost(server)
+    const app = { ...remoteApp(server.id, 8080), name: '' }
+    await store.saveApp(app)
+    assert.equal(store.app(app.id).name, '')
+    await store.nameAppFromPage(app, 'http://127.0.0.1:8080/')
+    assert.equal(store.app(app.id).name, '')
+    await Promise.all([
+      store.nameAppFromPage(app, '  Experiment\n Dashboard  '),
+      store.nameAppFromPage(app, 'Later navigation')
+    ])
+    assert.equal(store.app(app.id).name, 'Experiment Dashboard')
+    const restored = new Store(directory, cipher)
+    await restored.load()
+    assert.equal(restored.app(app.id).name, 'Experiment Dashboard')
+    await store.saveApp({ ...app, name: 'My custom name' })
+    await store.nameAppFromPage(app, 'Late title update')
+    assert.equal(store.app(app.id).name, 'My custom name')
+    await store.saveApp({ ...app, port: 9000 })
+    await store.nameAppFromPage(app, 'Old target title')
+    assert.equal(store.app(app.id).name, '')
+    await store.deleteApp(app.id)
+    await store.nameAppFromPage(app, 'Closed and deleted')
+    assert.equal(store.apps().length, 0)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})

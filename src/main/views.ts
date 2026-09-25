@@ -5,6 +5,7 @@ import { SshManager } from './core/ssh'
 import { ServiceManager } from './core/services'
 import { ServiceProxy } from './core/proxy'
 import { appUrl } from './core/schema'
+import { appName, pageName } from '../shared/app-name'
 
 type Tab = { state: AppTab; proxy?: ServiceProxy; view?: WebContentsView }
 export class Views {
@@ -59,7 +60,7 @@ export class Views {
     const tab: Tab = {
       state: {
         appId: id,
-        title: config.name,
+        title: appName(config),
         status: 'opening',
         message: '准备连接…',
         url: appUrl(config),
@@ -172,6 +173,38 @@ export class Views {
         tab.state.canGoForward = contents.navigationHistory.canGoForward()
         this.changed()
       }
+      let firstPageUrl = '',
+        naming = false
+      const nameFirstPage = (pageTitle = contents.getTitle()): void => {
+        if (
+          !current() ||
+          config.name ||
+          naming ||
+          tab.state.status !== 'ready' ||
+          contents.getURL() !== firstPageUrl
+        )
+          return
+        const title = pageName(pageTitle)
+        if (!title) return
+        naming = true
+        void this.store
+          .nameAppFromPage(config, title)
+          .then(() => {
+            if (!current()) return
+            const saved = this.store.apps().find((a) => a.id === id)
+            if (saved) tab.state.title = appName(saved)
+            this.changed()
+          })
+          .catch(() => {
+            naming = false
+            if (current()) {
+              tab.state.message =
+                '页面已打开，但自动名称未能保存；可在编辑应用中重试。'
+              this.changed()
+            }
+          })
+      }
+      contents.on('page-title-updated', (_event, title) => nameFirstPage(title))
       contents.on('did-navigate', navigation)
       contents.on('did-navigate-in-page', navigation)
       contents.on(
@@ -198,7 +231,9 @@ export class Views {
       await contents.loadURL(appUrl(config))
       if (!current()) return
       tab.state.status = 'ready'
+      firstPageUrl = contents.getURL()
       tab.state.message = message
+      nameFirstPage()
       this.layout()
       this.changed()
     } catch (error) {

@@ -1,6 +1,13 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
-import { FolderKey, Info } from 'lucide-react'
-import type { Host, HostInput, RemoteApp } from '../../../shared/api'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  FolderKey,
+  Info,
+  LoaderCircle,
+  RefreshCw,
+  Server,
+  Check
+} from 'lucide-react'
+import type { Host, HostInput, RemoteApp, Service } from '../../../shared/api'
 
 export function Field({
   label,
@@ -24,10 +31,12 @@ export function HostForm({
   hosts,
   save,
   useConfig,
+  saveLabel,
   cancel
 }: {
   host?: Host
   hosts: Host[]
+  saveLabel?: string
   useConfig: () => void
   save: (value: HostInput) => Promise<void>
   cancel: () => void
@@ -214,7 +223,7 @@ export function HostForm({
           取消
         </button>
         <button className="primary" disabled={busy}>
-          {busy ? '正在保存…' : '保存主机'}
+          {busy ? '正在保存…' : saveLabel || '保存主机'}
         </button>
       </div>
     </form>
@@ -227,7 +236,7 @@ export function newApp(hostId: string): RemoteApp {
     hostId,
     name: '',
     hostname: '127.0.0.1',
-    port: 6006,
+    port: 0,
     protocol: 'http',
     path: '/',
     startCommand: '',
@@ -241,29 +250,60 @@ export function newApp(hostId: string): RemoteApp {
 }
 export function AppForm({
   initial,
-  hosts,
+  host,
+  editing,
   save,
   cancel
 }: {
   initial: RemoteApp
-  hosts: Host[]
+  host: Host
+  editing: boolean
   save: (value: RemoteApp) => Promise<void>
   cancel: () => void
 }): React.JSX.Element {
-  const [value, set] = useState(initial),
-    [environment, setEnvironment] = useState(
-      Object.entries(initial.environment)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('\n')
-    )
+  const [value, set] = useState(initial)
+  const [environment, setEnvironment] = useState(
+    Object.entries(initial.environment)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n')
+  )
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
+  const [services, setServices] = useState<Service[]>([])
+  const [discovering, setDiscovering] = useState(!editing)
+  const [discoveryError, setDiscoveryError] = useState('')
+  const [revision, refresh] = useState(0)
   const update = (patch: Partial<RemoteApp>): void =>
     set((v) => ({ ...v, ...patch }))
+  useEffect(() => {
+    if (editing && revision === 0) return
+    let active = true
+    setDiscovering(true)
+    setDiscoveryError('')
+    void window.portico
+      .discover(host.id)
+      .then((data) => {
+        if (active) setServices(data.services)
+      })
+      .catch((reason) => {
+        if (active)
+          setDiscoveryError(
+            String(reason).replace(
+              /^Error invoking remote method '[^']+': Error: /,
+              ''
+            )
+          )
+      })
+      .finally(() => {
+        if (active) setDiscovering(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [host.id, editing, revision])
   function template(kind: string): void {
     if (kind === 'tensorboard')
       update({
-        name: 'TensorBoard',
         port: 6006,
         path: '/',
         startCommand:
@@ -271,14 +311,12 @@ export function AppForm({
       })
     if (kind === 'jupyter')
       update({
-        name: 'JupyterLab',
         port: 8888,
         path: '/lab',
         startCommand: 'exec jupyter lab --no-browser --ip=127.0.0.1 --port=8888'
       })
     if (kind === 'streamlit')
       update({
-        name: 'Streamlit',
         port: 8501,
         path: '/',
         startCommand:
@@ -298,7 +336,12 @@ export function AppForm({
         if (index < 1) throw new Error('环境变量每行格式应为 KEY=value')
         env[line.slice(0, index).trim()] = line.slice(index + 1)
       }
-      await save({ ...value, environment: env })
+      await save({
+        ...value,
+        hostId: host.id,
+        name: value.name.trim(),
+        environment: env
+      })
     } catch (e) {
       setError(String(e))
     } finally {
@@ -306,72 +349,125 @@ export function AppForm({
     }
   }
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <div className="templates">
-        <span>快速填入</span>
-        <button type="button" onClick={() => template('tensorboard')}>
-          TensorBoard
-        </button>
-        <button type="button" onClick={() => template('jupyter')}>
-          JupyterLab
-        </button>
-        <button type="button" onClick={() => template('streamlit')}>
-          Streamlit
-        </button>
+    <form className="app-form" onSubmit={(event) => void submit(event)}>
+      <div className="app-host-context">
+        <Server size={17} />
+        <strong>{host.name}</strong>
+        <span>
+          {host.sshAlias
+            ? `SSH · ${host.sshAlias}`
+            : `${host.username}@${host.hostname}`}
+        </span>
       </div>
-      <div className="form-grid">
-        <Field label="应用名称">
+      <section className="port-picker">
+        <Field label="服务端口" hint="选择一个已运行的端口，或直接输入。">
           <input
             autoFocus
-            required
-            value={value.name}
-            placeholder="例如：实验一 · TensorBoard"
-            onChange={(e) => update({ name: e.target.value })}
-          />
-        </Field>
-        <Field label="所属主机">
-          <select
-            value={value.hostId}
-            onChange={(e) => update({ hostId: e.target.value })}
-          >
-            {hosts.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="远端服务地址"
-          hint="从 SSH 主机上访问的地址，通常是 127.0.0.1"
-        >
-          <input
-            required
-            value={value.hostname}
-            onChange={(e) => update({ hostname: e.target.value })}
-          />
-        </Field>
-        <Field label="服务端口">
-          <input
             required
             type="number"
             min="1"
             max="65535"
-            value={value.port}
+            placeholder="例如 6006"
+            value={value.port || ''}
             onChange={(e) => update({ port: Number(e.target.value) })}
           />
         </Field>
-        <Field label="协议">
-          <select
-            value={value.protocol}
-            onChange={(e) =>
-              update({ protocol: e.target.value as 'http' | 'https' })
-            }
+        <div className="port-list-heading">
+          <span>{discovering ? '正在读取远端端口…' : '这台主机上的端口'}</span>
+          <button
+            type="button"
+            className="text-button"
+            disabled={discovering}
+            onClick={() => refresh((n) => n + 1)}
           >
-            <option>http</option>
-            <option>https</option>
-          </select>
-        </Field>
+            {discovering ? (
+              <LoaderCircle size={13} className="spin" />
+            ) : (
+              <RefreshCw size={13} />
+            )}
+            刷新端口
+          </button>
+        </div>
+        {discoveryError ? (
+          <p className="port-note">
+            暂时无法读取端口，可以直接输入。<span>{discoveryError}</span>
+          </p>
+        ) : (
+          <div className="port-options">
+            {services.map((service) => {
+              const selected =
+                value.port === service.port &&
+                value.hostname === service.hostname
+              return (
+                <button
+                  type="button"
+                  key={`${service.hostname}:${service.port}`}
+                  className={selected ? 'selected' : ''}
+                  aria-pressed={selected}
+                  onClick={() =>
+                    update({ port: service.port, hostname: service.hostname })
+                  }
+                >
+                  <strong>{service.port}</strong>
+                  <span>
+                    {service.suggestedName}
+                    <small>
+                      {service.hostname}
+                      {service.process ? ` · ${service.process}` : ''}
+                    </small>
+                  </span>
+                  {selected && <Check size={16} />}
+                </button>
+              )
+            })}
+            {!discovering && !services.length && (
+              <p className="port-note">未发现监听端口，仍可输入端口添加。</p>
+            )}
+          </div>
+        )}
+      </section>
+      <Field
+        label="名称（可选）"
+        hint="留空后，首次打开时使用网页标题；没有标题时显示端口。"
+      >
+        <input
+          maxLength={100}
+          value={value.name}
+          placeholder="自动使用网页标题"
+          onChange={(e) => update({ name: e.target.value })}
+        />
+      </Field>
+      <details className="app-advanced">
+        <summary>
+          连接设置{' '}
+          <span>
+            {value.protocol} · {value.hostname}
+            {value.path.split('?')[0]}
+          </span>
+        </summary>
+        <div className="form-grid">
+          <Field
+            label="远端服务地址"
+            hint="从 SSH 主机上访问的地址，通常是 127.0.0.1"
+          >
+            <input
+              required
+              value={value.hostname}
+              onChange={(e) => update({ hostname: e.target.value })}
+            />
+          </Field>
+          <Field label="协议">
+            <select
+              value={value.protocol}
+              onChange={(e) =>
+                update({ protocol: e.target.value as 'http' | 'https' })
+              }
+            >
+              <option>http</option>
+              <option>https</option>
+            </select>
+          </Field>
+        </div>
         <Field
           label="页面路径"
           hint="例如 /lab 或 /lab?token=…；配置会加密保存"
@@ -382,8 +478,12 @@ export function AppForm({
             onChange={(e) => update({ path: e.target.value })}
           />
         </Field>
-      </div>
-      <div className="form-section">
+      </details>
+      <details className="app-advanced" open={value.autoStart || undefined}>
+        <summary>
+          按需启动{' '}
+          <span>{value.autoStart ? '已开启' : '默认连接已有服务'}</span>
+        </summary>
         <label className="toggle">
           <input
             type="checkbox"
@@ -391,36 +491,50 @@ export function AppForm({
             onChange={(e) => update({ autoStart: e.target.checked })}
           />
           <div>
-            <strong>连接时按需启动</strong>
-            <small>
-              已有服务直接复用；未运行时执行以下命令。关闭页面不停止服务。
-            </small>
+            <strong>服务未运行时自动启动</strong>
+            <small>已运行则直接复用，关闭页面后继续在后台运行。</small>
           </div>
         </label>
-        {(value.autoStart || value.startCommand) && (
-          <>
-            <Field
-              label="启动命令"
-              hint="远端 Linux 需安装 Python 3。使用前台命令，不要加 &；可用 exec 或 conda run 启动。"
-            >
-              <textarea
-                rows={3}
-                value={value.startCommand}
-                placeholder="exec tensorboard --logdir ./runs --host 127.0.0.1 --port 6006"
-                onChange={(e) => update({ startCommand: e.target.value })}
-              />
-            </Field>
-            <Field label="工作目录">
-              <input
-                value={value.workingDirectory}
-                onChange={(e) => update({ workingDirectory: e.target.value })}
-              />
-            </Field>
-          </>
-        )}
-      </div>
-      <details>
-        <summary>环境与健康检查</summary>
+        <div className="templates">
+          <span>命令模板</span>
+          <button type="button" onClick={() => template('tensorboard')}>
+            TensorBoard
+          </button>
+          <button type="button" onClick={() => template('jupyter')}>
+            JupyterLab
+          </button>
+          <button type="button" onClick={() => template('streamlit')}>
+            Streamlit
+          </button>
+        </div>
+        <Field
+          label="启动命令"
+          hint="远端 Linux 需安装 Python 3。使用前台命令，不要加 &。"
+        >
+          <textarea
+            rows={3}
+            value={value.startCommand}
+            onChange={(e) => update({ startCommand: e.target.value })}
+          />
+        </Field>
+        <Field label="工作目录">
+          <input
+            value={value.workingDirectory}
+            onChange={(e) => update({ workingDirectory: e.target.value })}
+          />
+        </Field>
+        <Field label="环境变量（每行 KEY=value）">
+          <textarea
+            rows={3}
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value)}
+          />
+        </Field>
+      </details>
+      <details className="app-advanced">
+        <summary>
+          健康检查 <span>通常无需修改</span>
+        </summary>
         <div className="form-grid">
           <Field label="健康检查路径">
             <input
@@ -440,18 +554,11 @@ export function AppForm({
         </div>
         <Field
           label="预期响应文本（可选）"
-          hint="设置后可避免将端口上的其他服务误认成目标应用。"
+          hint="避免将端口上的其他服务误认成目标应用。"
         >
           <input
             value={value.expectedText}
             onChange={(e) => update({ expectedText: e.target.value })}
-          />
-        </Field>
-        <Field label="环境变量（每行 KEY=value）">
-          <textarea
-            rows={3}
-            value={environment}
-            onChange={(e) => setEnvironment(e.target.value)}
           />
         </Field>
       </details>
@@ -464,8 +571,8 @@ export function AppForm({
         <button type="button" className="secondary" onClick={cancel}>
           取消
         </button>
-        <button className="primary" disabled={busy}>
-          {busy ? '正在保存…' : '保存应用'}
+        <button className="primary" disabled={busy || !value.port}>
+          {busy ? '正在保存…' : editing ? '保存更改' : '打开应用'}
         </button>
       </div>
     </form>

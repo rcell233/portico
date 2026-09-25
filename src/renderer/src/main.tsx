@@ -8,13 +8,10 @@ import {
   ChevronRight,
   CircleHelp,
   FileText,
-  FolderInput,
   Globe2,
   LayoutGrid,
   LoaderCircle,
   Pencil,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Power,
   RefreshCw,
@@ -26,13 +23,8 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import type {
-  Discovery,
-  Host,
-  ImportedHost,
-  RemoteApp,
-  Workspace
-} from '../../shared/api'
+import type { Host, ImportedHost, RemoteApp, Workspace } from '../../shared/api'
+import { appName } from '../../shared/app-name'
 import { AppForm, HostForm, newApp } from './components/Forms'
 import { HostPicker, BackToConfig } from './components/HostPicker'
 import logo from '../../../resources/icon.svg'
@@ -46,11 +38,10 @@ const empty: Workspace = {
   activeTab: null
 }
 type Modal =
-  | { kind: 'host'; host?: Host; adding?: boolean; warning?: string }
+  | { kind: 'host'; host?: Host; adding?: boolean; creatingApp?: boolean }
   | { kind: 'app'; app: RemoteApp }
-  | { kind: 'discover'; host: Host; data?: Discovery }
   | { kind: 'logs'; app: RemoteApp; text?: string }
-  | { kind: 'import'; replace?: Host }
+  | { kind: 'import'; replace?: Host; creatingApp?: boolean }
   | {
       kind: 'confirm'
       title: string
@@ -69,7 +60,6 @@ function App(): React.JSX.Element {
   const [workspace, setWorkspace] = useState<Workspace>(empty),
     [selectedHost, setSelectedHost] = useState(''),
     [query, setQuery] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [modal, setModal] = useState<Modal | null>(null),
     [error, setError] = useState(''),
     [pending, setPending] = useState<string[]>([])
@@ -103,9 +93,6 @@ function App(): React.JSX.Element {
     return cleanup
   }, [])
   useEffect(() => {
-    setSidebarCollapsed(workspace.activeTab !== null)
-  }, [workspace.activeTab])
-  useEffect(() => {
     const element = viewport.current
     if (!element) return
     const measure = (): void => {
@@ -116,7 +103,7 @@ function App(): React.JSX.Element {
     observer.observe(element)
     measure()
     return () => observer.disconnect()
-  }, [workspace.activeTab, sidebarCollapsed])
+  }, [workspace.activeTab])
   useEffect(() => {
     if (modal && !dialog.current?.open) dialog.current?.showModal()
   }, [modal])
@@ -132,11 +119,12 @@ function App(): React.JSX.Element {
     void run('home', () => api.activateTab(null))
   }
   const current = workspace.tabs.find((t) => t.appId === workspace.activeTab)
+  const sidebarCollapsed = Boolean(current)
   const currentApp = workspace.apps.find((a) => a.id === workspace.activeTab)
   const apps = workspace.apps.filter(
     (a) =>
       (!selectedHost || a.hostId === selectedHost) &&
-      `${a.name} ${a.hostname} ${a.port}`
+      `${appName(a)} ${a.hostname} ${a.port}`
         .toLowerCase()
         .includes(query.toLowerCase())
   )
@@ -144,24 +132,13 @@ function App(): React.JSX.Element {
   const connectedCount = workspace.connections.filter(
     (c) => c.status === 'connected'
   ).length
-  const addApp = (initial?: RemoteApp): void => {
-    if (!workspace.hosts.length) {
-      importHosts()
+  const addApp = (initial?: RemoteApp, hostId = selectedHost): void => {
+    setError('')
+    if (!initial && !hostId) {
+      void show({ kind: 'import', creatingApp: true })
       return
     }
-    void show({
-      kind: 'app',
-      app: initial || newApp(selectedHost || workspace.hosts[0].id)
-    })
-  }
-  const discover = (host: Host): void => {
-    void run('discover', async () => {
-      await show({ kind: 'discover', host })
-      const data = await api.discover(host.id)
-      setModal((m) =>
-        m?.kind === 'discover' && m.host.id === host.id ? { ...m, data } : m
-      )
-    })
+    void show({ kind: 'app', app: initial || newApp(hostId) })
   }
   const logs = (app: RemoteApp): void => {
     void run('logs', async () => {
@@ -175,7 +152,7 @@ function App(): React.JSX.Element {
   const removeApp = (app: RemoteApp): void => {
     void show({
       kind: 'confirm',
-      title: `删除 ${app.name}？`,
+      title: `删除 ${appName(app)}？`,
       detail: '将删除保存的应用配置并关闭标签页，远端服务会继续运行。',
       action: () => api.deleteApp(app.id)
     })
@@ -193,14 +170,14 @@ function App(): React.JSX.Element {
   }
   const importHosts = (): void => {
     setError('')
-    void show({ kind: 'import' })
+    void show({ kind: 'import', creatingApp: true })
   }
   const selectConfigHost = async (h: ImportedHost): Promise<void> => {
     const id =
       modal?.kind === 'import' && modal.replace
         ? modal.replace.id
         : crypto.randomUUID()
-    await api.saveHost({
+    const updated = await api.saveHost({
       id,
       name: h.name,
       sshAlias: h.name,
@@ -211,8 +188,11 @@ function App(): React.JSX.Element {
       auth: 'agent',
       jumpHostId: ''
     })
+    setWorkspace(updated)
     setSelectedHost(id)
-    await close()
+    if (modal?.kind === 'import' && modal.creatingApp)
+      setModal({ kind: 'app', app: newApp(id) })
+    else await close()
   }
   return (
     <div className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -244,60 +224,110 @@ function App(): React.JSX.Element {
           全部应用<span className="count">{workspace.apps.length}</span>
         </button>
         <div className="sidebar-heading">
-          <span>主机</span>
-          <div>
-            <button
-              title="从 SSH config 导入"
-              className="icon-button"
-              onClick={importHosts}
-            >
-              <FolderInput size={15} />
-            </button>
-            <button
-              title="添加主机"
-              className="icon-button"
-              onClick={() => importHosts()}
-            >
-              <Plus size={17} />
-            </button>
-          </div>
+          <span>主机与应用</span>
+          <button
+            title="添加应用：选择主机和端口"
+            className="icon-button"
+            onClick={importHosts}
+          >
+            <Plus size={17} />
+          </button>
         </div>
         <div className="host-list">
           {workspace.hosts.map((h) => {
             const status =
               workspace.connections.find((c) => c.hostId === h.id)?.status ||
               'disconnected'
+            const savedApps = workspace.apps.filter((a) => a.hostId === h.id)
             return (
-              <button
+              <section
+                className="host-group"
                 key={h.id}
-                className={`nav-item host-item ${selectedHost === h.id && !current ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedHost(h.id)
-                  home()
-                }}
+                aria-label={`${h.name} 的应用`}
               >
-                <Server size={17} />
-                <span>
-                  {h.name}
-                  <small>
-                    {h.username}@{h.hostname}
-                  </small>
-                </span>
-                <i className={`dot ${status}`} />
-              </button>
+                <div className="host-group-heading">
+                  <button
+                    className={`nav-item host-item ${selectedHost === h.id ? 'selected' : ''}`}
+                    onClick={() => {
+                      setSelectedHost(h.id)
+                      home()
+                    }}
+                  >
+                    <Server size={16} />
+                    <span>
+                      {h.name}
+                      <small>
+                        {h.username}@{h.hostname}
+                      </small>
+                    </span>
+                    <i className={`dot ${status}`} />
+                  </button>
+                  <button
+                    className="icon-button host-add-app"
+                    title={`在 ${h.name} 上添加应用`}
+                    onClick={() => {
+                      setSelectedHost(h.id)
+                      addApp(undefined, h.id)
+                    }}
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
+                <div className="host-apps">
+                  {savedApps.map((a) => {
+                    const tab = workspace.tabs.find((t) => t.appId === a.id)
+                    return (
+                      <button
+                        key={a.id}
+                        className="sidebar-app"
+                        title={`${appName(a)} · ${a.hostname}:${a.port}`}
+                        onClick={() => {
+                          setSelectedHost(h.id)
+                          void run(a.id, () => api.openApp(a.id))
+                        }}
+                      >
+                        {tab?.status === 'opening' ? (
+                          <LoaderCircle size={14} className="spin" />
+                        ) : (
+                          <Globe2 size={14} />
+                        )}
+                        <span>{appName(a)}</span>
+                        <small>:{a.port}</small>
+                        {tab && (
+                          <i
+                            className={`dot ${tab.status === 'ready' ? 'connected' : tab.status === 'error' ? 'error' : 'connecting'}`}
+                          />
+                        )}
+                      </button>
+                    )
+                  })}
+                  {!savedApps.length && (
+                    <button
+                      className="sidebar-app empty-host"
+                      onClick={() => {
+                        setSelectedHost(h.id)
+                        addApp(undefined, h.id)
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>选择端口，添加应用</span>
+                    </button>
+                  )}
+                </div>
+              </section>
             )
           })}
           {!workspace.hosts.length && (
             <p className="sidebar-empty">
-              添加主机，让远程工具
+              选择一台主机和一个端口，
               <br />
-              在这里安家。
+              打开你的远程应用。
             </p>
           )}
         </div>
-        <button className="add-host" onClick={() => importHosts()}>
+        <button className="add-host" onClick={importHosts}>
           <Plus size={16} />
-          添加主机
+          添加应用
         </button>
         <div className="sidebar-footer">
           <div>
@@ -311,59 +341,49 @@ function App(): React.JSX.Element {
         </div>
       </aside>
       <main>
-        <div className="tabbar">
-          <button
-            className="sidebar-toggle"
-            title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-            aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-            aria-expanded={!sidebarCollapsed}
-            aria-controls="workspace-sidebar"
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-          >
-            {sidebarCollapsed ? (
-              <PanelLeftOpen size={17} />
-            ) : (
-              <PanelLeftClose size={17} />
+        {workspace.tabs.length > 0 && (
+          <div className="tabbar">
+            {current && (
+              <button className="workspace-return" onClick={home}>
+                <ArrowLeft size={15} />
+                返回工作空间
+              </button>
             )}
-          </button>
-          <button
-            className={`home-tab ${!current ? 'active' : ''}`}
-            title="应用库"
-            onClick={home}
-          >
-            <LayoutGrid size={16} />
-          </button>
-          {workspace.tabs.map((tab) => (
-            <div
-              className={`tab ${current?.appId === tab.appId ? 'active' : ''}`}
-              key={tab.appId}
-            >
-              <button
-                onClick={() =>
-                  void run('tab', () => api.activateTab(tab.appId))
-                }
+            {!current && <span className="workspace-tab-label">工作空间</span>}
+            {workspace.tabs.map((tab) => (
+              <div
+                className={`tab ${current?.appId === tab.appId ? 'active' : ''}`}
+                key={tab.appId}
               >
-                {tab.status === 'opening' ? (
-                  <LoaderCircle size={14} className="spin" />
-                ) : (
-                  <Globe2 size={14} />
-                )}
-                <span>{tab.title}</span>
-              </button>
-              <button
-                title={`关闭 ${tab.title}`}
-                className="tab-close"
-                onClick={() => void run('close', () => api.closeTab(tab.appId))}
-              >
-                <X size={13} />
-              </button>
-            </div>
-          ))}
-          <div className="tabbar-space" />
-          <span className="private-label">
-            <ShieldCheck size={13} /> SSH WORKSPACE
-          </span>
-        </div>
+                <button
+                  onClick={() =>
+                    void run('tab', () => api.activateTab(tab.appId))
+                  }
+                >
+                  {tab.status === 'opening' ? (
+                    <LoaderCircle size={14} className="spin" />
+                  ) : (
+                    <Globe2 size={14} />
+                  )}
+                  <span>{tab.title}</span>
+                </button>
+                <button
+                  title={`关闭 ${tab.title}`}
+                  className="tab-close"
+                  onClick={() =>
+                    void run('close', () => api.closeTab(tab.appId))
+                  }
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+            <div className="tabbar-space" />
+            <span className="private-label">
+              <ShieldCheck size={13} /> SSH WORKSPACE
+            </span>
+          </div>
+        )}
         {!current ? (
           <>
             <header className="library-header">
@@ -373,13 +393,6 @@ function App(): React.JSX.Element {
                 <span>{host?.name || '全部应用'}</span>
               </div>
               <div className="header-actions">
-                <button
-                  className="secondary"
-                  onClick={() => (host ? discover(host) : importHosts())}
-                >
-                  {host ? <Activity size={15} /> : <FolderInput size={15} />}
-                  {host ? '发现服务' : '添加主机'}
-                </button>
                 <button className="primary" onClick={() => addApp()}>
                   <Plus size={16} />
                   添加应用
@@ -515,21 +528,21 @@ function App(): React.JSX.Element {
                           <div className="card-tools">
                             <button
                               className="icon-button"
-                              title={`编辑 ${a.name}`}
+                              title={`编辑 ${appName(a)}`}
                               onClick={() => addApp(a)}
                             >
                               <Pencil size={14} />
                             </button>
                             <button
                               className="icon-button"
-                              title={`删除 ${a.name}`}
+                              title={`删除 ${appName(a)}`}
                               onClick={() => removeApp(a)}
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                         </div>
-                        <h2>{a.name}</h2>
+                        <h2>{appName(a)}</h2>
                         <p className="card-host">
                           <Server size={12} />
                           {h?.name}
@@ -585,8 +598,8 @@ function App(): React.JSX.Element {
                     {query
                       ? '试试其他名称、地址或端口。'
                       : workspace.hosts.length
-                        ? '添加一个应用，或发现主机上已经运行的服务。'
-                        : '从添加第一台 SSH 主机开始。你的服务仍在远端，体验就在眼前。'}
+                        ? '选择这台主机上的端口，打开一个应用。'
+                        : '选择主机和端口，打开你的第一个远程应用。'}
                   </p>
                   {!query && (
                     <button
@@ -596,9 +609,7 @@ function App(): React.JSX.Element {
                       }
                     >
                       <Plus size={16} />
-                      {workspace.hosts.length
-                        ? '添加第一个应用'
-                        : '添加第一台主机'}
+                      添加第一个应用
                     </button>
                   )}
                   <div className="service-chips">
@@ -771,16 +782,16 @@ function App(): React.JSX.Element {
                   : modal.kind === 'app'
                     ? workspace.apps.some((a) => a.id === modal.app.id)
                       ? '编辑应用'
-                      : '添加远程应用'
-                    : modal.kind === 'discover'
-                      ? `发现服务 · ${modal.host.name}`
-                      : modal.kind === 'logs'
-                        ? `运行日志 · ${modal.app.name}`
-                        : modal.kind === 'import'
-                          ? '添加 SSH 主机'
-                          : modal.kind === 'confirm'
-                            ? modal.title
-                            : '关于你的远程工作空间'}
+                      : '添加应用 · 选择端口'
+                    : modal.kind === 'logs'
+                      ? `运行日志 · ${appName(modal.app)}`
+                      : modal.kind === 'import'
+                        ? modal.creatingApp
+                          ? '添加应用 · 选择主机'
+                          : '选择 SSH 配置'
+                        : modal.kind === 'confirm'
+                          ? modal.title
+                          : '关于你的远程工作空间'}
               </h2>
             </div>
             <button
@@ -800,19 +811,25 @@ function App(): React.JSX.Element {
             {modal.kind === 'host' && (
               <>
                 {modal.adding && <BackToConfig onClick={importHosts} />}
-                {modal.warning && (
-                  <div className="note config-review">{modal.warning}</div>
-                )}
                 <HostForm
                   key={modal.host?.id || 'manual'}
                   host={modal.host}
                   hosts={workspace.hosts}
+                  saveLabel={modal.creatingApp ? '下一步：选择端口' : undefined}
                   useConfig={() =>
-                    setModal({ kind: 'import', replace: modal.host })
+                    setModal({
+                      kind: 'import',
+                      replace: modal.host,
+                      creatingApp: modal.creatingApp
+                    })
                   }
                   save={async (value) => {
-                    await api.saveHost(value)
-                    await close()
+                    const updated = await api.saveHost(value)
+                    setWorkspace(updated)
+                    if (modal.creatingApp) {
+                      setSelectedHost(value.id)
+                      setModal({ kind: 'app', app: newApp(value.id) })
+                    } else await close()
                   }}
                   cancel={() => void close()}
                 />
@@ -820,54 +837,19 @@ function App(): React.JSX.Element {
             )}
             {modal.kind === 'app' && (
               <AppForm
+                key={modal.app.id}
                 initial={modal.app}
-                hosts={workspace.hosts}
+                host={workspace.hosts.find((h) => h.id === modal.app.hostId)!}
+                editing={workspace.apps.some((a) => a.id === modal.app.id)}
                 save={async (value) => {
-                  await api.saveApp(value)
+                  const editing = workspace.apps.some((a) => a.id === value.id)
+                  setWorkspace(await api.saveApp(value))
                   await close()
+                  if (!editing) void run(value.id, () => api.openApp(value.id))
                 }}
                 cancel={() => void close()}
               />
             )}
-            {modal.kind === 'discover' &&
-              (modal.data ? (
-                <>
-                  <p className="intro">{modal.data.note}</p>
-                  <div className="service-list">
-                    {modal.data.services.map((service) => (
-                      <button
-                        key={`${service.hostname}:${service.port}`}
-                        onClick={() =>
-                          setModal({
-                            kind: 'app',
-                            app: {
-                              ...newApp(modal.host.id),
-                              name: service.suggestedName,
-                              hostname: service.hostname,
-                              port: service.port
-                            }
-                          })
-                        }
-                      >
-                        <Globe2 size={20} />
-                        <span>
-                          <strong>{service.suggestedName}</strong>
-                          <small>
-                            {service.hostname}:{service.port}{' '}
-                            {service.process && `· ${service.process}`}
-                          </small>
-                        </span>
-                        <Plus size={17} />
-                      </button>
-                    ))}
-                    {!modal.data.services.length && (
-                      <p>没有发现可用的监听端口。也可以手动添加应用。</p>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <Loading text="正在读取远端监听端口…" />
-              ))}
             {modal.kind === 'logs' && (
               <>
                 <div className="log-actions">
@@ -915,7 +897,21 @@ function App(): React.JSX.Element {
                   (h) => h.id !== modal.replace?.id
                 )}
                 select={selectConfigHost}
-                manual={() => setModal({ kind: 'host', adding: true })}
+                selectSaved={
+                  modal.creatingApp
+                    ? (h) => {
+                        setSelectedHost(h.id)
+                        setModal({ kind: 'app', app: newApp(h.id) })
+                      }
+                    : undefined
+                }
+                manual={() =>
+                  setModal({
+                    kind: 'host',
+                    adding: true,
+                    creatingApp: modal.creatingApp
+                  })
+                }
               />
             )}
             {modal.kind === 'confirm' && (
@@ -946,7 +942,7 @@ function App(): React.JSX.Element {
                 <p>Portico 将 SSH 主机上的 Web 服务放进独立的应用标签页。</p>
                 <ol>
                   <li>
-                    添加主机，优先从本机 SSH 配置选择；没有配置时再手动添加。
+                    添加应用，选择主机后直接选端口；也可以从左侧某台主机下添加。
                   </li>
                   <li>添加应用的远端地址和端口，或使用“发现服务”。</li>
                   <li>打开应用；需要时启用按需启动，并填写命令与工作目录。</li>
@@ -971,14 +967,6 @@ function App(): React.JSX.Element {
           </div>
         </dialog>
       )}
-    </div>
-  )
-}
-function Loading({ text }: { text: string }): React.JSX.Element {
-  return (
-    <div className="loading">
-      <LoaderCircle className="spin" size={22} />
-      <span>{text}</span>
     </div>
   )
 }

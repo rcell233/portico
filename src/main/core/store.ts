@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { appSchema, hostSchema } from './schema'
+import { pageName } from '../../shared/app-name'
 import type { Host, HostInput, RemoteApp } from '../../shared/api'
 
 export interface Cipher {
@@ -139,6 +140,25 @@ export class Store {
       if (!d.hosts.some((h) => h.id === app.hostId))
         throw new Error('主机不存在')
       d.apps = [...d.apps.filter((a) => a.id !== app.id), app]
+    })
+  }
+  nameAppFromPage(opened: RemoteApp, title: string): Promise<void> {
+    const name = pageName(title)
+    if (!name) return Promise.resolve()
+    return this.mutate((d) => {
+      const saved = d.apps.find((a) => a.id === opened.id)
+      // A delayed page event must not overwrite a user name or an edited target.
+      if (
+        !saved ||
+        saved.name ||
+        saved.hostId !== opened.hostId ||
+        saved.hostname !== opened.hostname ||
+        saved.port !== opened.port ||
+        saved.protocol !== opened.protocol ||
+        saved.path !== opened.path
+      )
+        return
+      saved.name = name
     })
   }
   deleteApp(id: string): Promise<void> {

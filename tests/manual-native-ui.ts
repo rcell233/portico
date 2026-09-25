@@ -6,13 +6,25 @@ import { sshFixture } from './fixtures'
 import { SshManager } from '../src/main/core/ssh'
 import { promptSsh } from '../src/main/ssh-prompt'
 import { importSshConfig } from '../src/main/core/import'
-import { hostSchema } from '../src/main/core/schema'
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { ServiceManager } from '../src/main/core/services'
+import { Views } from '../src/main/views'
+import { hostSchema, appSchema } from '../src/main/core/schema'
 
 app.setName('Portico SSH QA')
 app.whenReady().then(async () => {
   const fixture = await sshFixture()
   // Remove only this harness's disposable fixture entry, before showing the UI.
   await fixture.store.deleteHost(fixture.host.id)
+  const web = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.end(
+      `<!doctype html><html><head><title>实验看板 · Portico QA</title></head><body style="font:20px system-ui;padding:60px"><h1>端口应用已打开</h1><p>此页面通过真实 SSH 代理连接。</p><button onclick="document.title='后续页面标题'">改变页面标题</button></body></html>`
+    )
+  })
+  await new Promise<void>((resolve) => web.listen(0, '127.0.0.1', resolve))
+  const webPort = (web.address() as AddressInfo).port
   const configPath = join(fixture.directory, 'config')
   const relay = join(fixture.directory, 'relay.cjs')
   await writeFile(
@@ -25,8 +37,8 @@ app.whenReady().then(async () => {
   )
   const window = new BrowserWindow({
     title: 'Portico SSH QA',
-    width: 1100,
-    height: 800,
+    width: 1280,
+    height: 900,
     webPreferences: {
       preload: resolve('out/preload/index.js'),
       contextIsolation: true,
@@ -58,12 +70,14 @@ app.whenReady().then(async () => {
       }
     })
   )
+  const services = new ServiceManager(ssh)
+  const views = new Views(window, fixture.store, ssh, services, changed)
   const snapshot = (): object => ({
     hosts: fixture.store.hosts(),
-    apps: [],
+    apps: fixture.store.apps(),
     connections: ssh.states(),
-    tabs: [],
-    activeTab: null
+    tabs: views.states(),
+    activeTab: views.active
   })
   ipcMain.handle('portico:snapshot', snapshot)
   ipcMain.handle('portico:importHosts', () => importSshConfig({ configPath }))
@@ -78,9 +92,37 @@ app.whenReady().then(async () => {
     console.log(result.stdout)
   })
   ipcMain.handle('portico:disconnect', (_event, id) => ssh.disconnect(id))
-  ipcMain.handle('portico:overlay', () => {})
-  ipcMain.handle('portico:bounds', () => {})
+  ipcMain.handle('portico:discover', async (_event, id) => {
+    await ssh.connect(id)
+    return {
+      services: [
+        {
+          hostname: '127.0.0.1',
+          port: webPort,
+          suggestedName: '测试网页',
+          process: 'node'
+        }
+      ],
+      note: 'Isolated fixture listener'
+    }
+  })
+  ipcMain.handle('portico:saveApp', async (_event, input) => {
+    const value = appSchema.parse(input)
+    views.close(value.id)
+    await fixture.store.saveApp(value)
+    changed()
+    return snapshot()
+  })
+  ipcMain.handle('portico:openApp', (_event, id) => views.open(id))
+  ipcMain.handle('portico:closeTab', (_event, id) => views.close(id))
+  ipcMain.handle('portico:activateTab', (_event, id) => views.activate(id))
+  ipcMain.handle('portico:navigate', (_event, action) => views.navigate(action))
+  ipcMain.handle('portico:overlay', (_event, value) => views.overlay(value))
+  ipcMain.handle('portico:bounds', (_event, value) => views.setBounds(value))
   window.on('closed', () => {
+    views.closeAll()
+    web.closeAllConnections()
+    web.close()
     ssh.close()
     void fixture.cleanup().then(() => app.quit())
   })

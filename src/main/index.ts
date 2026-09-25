@@ -19,6 +19,7 @@ import { Views } from './views'
 import { promptSsh } from './ssh-prompt'
 import { sshEnvironment } from './core/ssh-environment'
 import type { Workspace } from '../shared/api'
+import { appName } from '../shared/app-name'
 
 if (process.env.PORTICO_USER_DATA)
   app.setPath('userData', process.env.PORTICO_USER_DATA)
@@ -171,7 +172,7 @@ function register(): void {
     const item = store.app(id)
     if (
       !(await views?.confirm(
-        `停止 ${item.name}？`,
+        `停止 ${appName(item)}？`,
         '只会向经过进程身份校验的 Portico 托管进程组发送停止信号。已有的外部服务不会被停止。'
       ))
     )

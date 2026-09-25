@@ -36,7 +36,7 @@ export const appSchema = z
   .object({
     id,
     hostId: id,
-    name: z.string().trim().min(1).max(100),
+    name: z.string().trim().max(100),
     hostname: address,
     port: z.number().int().min(1).max(65535),
     protocol: z.enum(['http', 'https']),
