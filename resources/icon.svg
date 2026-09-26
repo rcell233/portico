@@ -3,11 +3,14 @@
     <linearGradient id="a" x1="72" y1="48" x2="440" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#315F50"/><stop offset="1" stop-color="#122E28"/></linearGradient>
     <linearGradient id="b" x1="180" y1="136" x2="338" y2="394" gradientUnits="userSpaceOnUse"><stop stop-color="#FCF8E8"/><stop offset="1" stop-color="#DCE8CC"/></linearGradient>
   </defs>
-  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#a)"/>
-  <rect x="25.5" y="25.5" width="461" height="461" rx="106.5" stroke="#FFF" stroke-opacity=".12" stroke-width="3"/>
+  <!-- Icon artwork: 412pt face within a 512pt transparent canvas. -->
+  <path d="M162 50H350C392 50 414 50 438 74C462 98 462 120 462 162V350C462 392 462 414 438 438C414 462 392 462 350 462H162C120 462 98 462 74 438C50 414 50 392 50 350V162C50 120 50 98 74 74C98 50 120 50 162 50Z" fill="url(#a)"/>
+  <path d="M162 50H350C392 50 414 50 438 74C462 98 462 120 462 162V350C462 392 462 414 438 438C414 462 392 462 350 462H162C120 462 98 462 74 438C50 414 50 392 50 350V162C50 120 50 98 74 74C98 50 120 50 162 50Z" stroke="#FFF" stroke-opacity=".12" stroke-width="1.5"/>
+  <g transform="translate(256 256) scale(.888) translate(-256 -256)">
   <path d="M144 382V233C144 167 190 120 256 120s112 47 112 113v149h-48V233c0-40-25-67-64-67s-64 27-64 67v149h-48Z" fill="url(#b)"/>
   <path d="M237 213h43v169h-43V213Z" fill="#9DC6AC"/>
   <path d="m280 213 30 20v149h-30V213Z" fill="#6B9D87"/>
   <circle cx="261" cy="298" r="5" fill="#193D32"/>
   <path d="M130 397h252" stroke="#FCF8E8" stroke-opacity=".24" stroke-width="8" stroke-linecap="round"/>
+  </g>
 </svg>
