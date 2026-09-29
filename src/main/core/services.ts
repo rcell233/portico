@@ -1,6 +1,7 @@
 import http from 'node:http'
 import https from 'node:https'
 import tls from 'node:tls'
+import { StringDecoder } from 'node:string_decoder'
 import { isIP, type Socket } from 'node:net'
 import { remoteRunner } from './remote-runner'
 import { SshManager } from './ssh'
@@ -73,6 +74,7 @@ export class ServiceManager {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        request.destroy()
         agent.destroy()
         channel.destroy()
         resolve({ reachable: true, ready, error })
@@ -86,24 +88,33 @@ export class ServiceManager {
           agent
         },
         (response) => {
-          let body = '',
-            bytes = 0
-          response.on('data', (chunk: Buffer) => {
-            bytes += chunk.length
-            if (bytes <= 256 * 1024) body += chunk.toString()
-            if (bytes > 256 * 1024) {
-              request.destroy()
-              finish(false, '健康检查响应超过 256 KB')
+          const status = response.statusCode || 500
+          if (status < 200 || status >= 500) {
+            finish(false, `健康检查返回 HTTP ${status}`)
+            return
+          }
+          // Default checks only need response headers, not the entire page.
+          if (!app.expectedText) {
+            finish(true)
+            return
+          }
+          // Match across chunk/UTF-8 boundaries without retaining the full body.
+          const decoder = new StringDecoder('utf8')
+          let tail = ''
+          const match = (text: string): boolean => {
+            const window = tail + text
+            if (window.includes(app.expectedText)) {
+              finish(true)
+              return true
             }
-          })
+            tail = window.slice(-Math.max(0, app.expectedText.length - 1))
+            if (app.expectedText.length === 1) tail = ''
+            return false
+          }
+          response.on('data', (chunk: Buffer) => match(decoder.write(chunk)))
           response.on('end', () => {
-            const status = response.statusCode || 500
-            finish(
-              status >= 200 &&
-                status < 500 &&
-                (!app.expectedText || body.includes(app.expectedText)),
-              `HTTP ${status} 或响应内容不匹配`
-            )
+            if (!match(decoder.end()))
+              finish(false, `HTTP ${status}，响应未包含指定的健康检查文本`)
           })
           response.on('error', (error) => finish(false, error.message))
         }
