@@ -108,7 +108,10 @@ export class Views {
         config.port,
         config.protocol,
         () => this.ssh.forward(config.hostId, config.hostname, config.port),
-        dialPublic
+        (url) =>
+          dialPublic(url, (target) =>
+            session.defaultSession.resolveProxy(target)
+          )
       )
       tab.proxy = proxy
       await proxy.start()
